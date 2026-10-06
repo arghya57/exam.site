@@ -4,33 +4,77 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>অনলাইন পরীক্ষা</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://knjfubfnhwqruqehsqbq.supabase.co">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600&family=Noto+Serif+Bengali:wght@500;700&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#1c2154">
 <style>
-:root{--bg:#f3f6f4;--card:#fff;--ink:#14231c;--mute:#5d6f66;--line:#d5dfd9;--accent:#1f6f50;--bad:#b3362f}
-@media (prefers-color-scheme:dark){:root{--bg:#101a15;--card:#18251e;--ink:#e8f1ec;--mute:#9bb0a4;--line:#2b3d33;--accent:#4fb88a;--bad:#ef7b73}}
+@counter-style bnalpha{system:alphabetic;symbols:"ক" "খ" "গ" "ঘ" "ঙ" "চ";suffix:""}
+:root{--bg:#eef0f8;--card:#fff;--ink:#181c44;--mute:#5b6088;--line:#d9dcee;--accent:#1c2154;--on:#fff;--gold:#f0a81c;--ok:#1d7a52;--bad:#b83a3a;--serif:"Noto Serif Bengali","Hind Siliguri",serif;--sans:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1230;--card:#181c44;--ink:#eceefb;--mute:#a3a8d1;--line:#2d3270;--accent:#f0a81c;--on:#181c44;--gold:#f0a81c;--ok:#5fd3a0;--bad:#ff8c8c}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif;line-height:1.6}
-.wrap{max-width:640px;margin:0 auto;padding:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:14px}
-h1{font-size:1.4rem;margin:0 0 8px} h2{font-size:1.1rem;margin:0 0 8px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:1.02rem;line-height:1.7;
+  background-image:radial-gradient(circle at 7px 7px,var(--gold) 2.2px,transparent 2.6px),linear-gradient(#1c2154,#1c2154);
+  background-size:18px 14px,100% 14px;background-repeat:repeat-x,no-repeat;background-position:0 0,0 0;padding-top:14px}
+.wrap{max-width:620px;margin:0 auto;padding:28px 16px 48px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px 22px 6px 22px;padding:24px;margin-bottom:18px}
+h1,h2{font-family:var(--serif);color:var(--ink);line-height:1.4}
+h1{font-size:1.55rem;margin:0 0 14px;font-weight:700}
+h2{font-size:1.15rem;margin:0 0 12px;font-weight:700;padding-bottom:8px;border-bottom:2px solid var(--gold);display:inline-block}
 p{margin:0 0 10px;color:var(--mute)}
-input{width:100%;padding:12px;font:inherit;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);margin:4px 0 12px}
-button{font:inherit;border:0;border-radius:10px;padding:11px 18px;background:var(--accent);color:#fff;cursor:pointer}
-button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+label{display:block;font-weight:500;color:var(--mute);font-size:.92rem}
+input{width:100%;padding:13px 14px;font:inherit;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);margin:4px 0 14px}
+input:focus,button:focus-visible{outline:3px solid color-mix(in srgb,var(--gold) 70%,transparent);outline-offset:2px;border-color:var(--gold)}
+button{font:inherit;font-weight:500;border:0;border-radius:12px;padding:12px 20px;background:var(--accent);color:var(--on);cursor:pointer;transition:transform .12s}
+button:active{transform:scale(.97)}
+button.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
 button:disabled{opacity:.4}
-.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+#auth button{width:100%;margin-bottom:10px}
+#submit{width:100%;padding:14px;font-size:1.05rem;background:var(--gold);color:#181c44;font-weight:600}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
-.opt{display:flex;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;cursor:pointer}
-.opt.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.bar{position:sticky;top:0;background:var(--bg);display:flex;justify-content:space-between;padding:10px 0;font-weight:700}
-.low{color:var(--bad)} .err{color:var(--bad);min-height:1.4em}
-.hide{display:none} .score{font-size:3rem;font-weight:700}
-.nav{display:flex;justify-content:space-between;gap:10px;margin-top:14px}
+#opts{counter-reset:o}
+.opt{counter-increment:o;display:flex;align-items:center;gap:14px;padding:14px;border:1.5px solid var(--line);border-radius:14px;margin-bottom:12px;cursor:pointer;transition:border-color .15s,background .15s}
+.opt::before{content:counter(o,bnalpha);flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--bg);color:var(--ink);font-weight:600}
+.opt.sel{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 16%,transparent)}
+.opt.sel::before{background:var(--gold);color:#181c44}
+.bar{position:sticky;top:0;z-index:5;background:var(--accent);color:var(--on);display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-radius:14px;margin-bottom:16px;font-weight:600}
+#timer{background:var(--gold);color:#181c44;padding:2px 14px;border-radius:99px;font-variant-numeric:tabular-nums}
+.low{background:var(--bad)!important;color:#fff!important}
+.err{color:var(--bad);min-height:1.4em}
+.hide{display:none}
+#qn{color:var(--mute);font-size:.92rem;margin-bottom:4px}
+#q{font-size:1.25rem;border:0;display:block;padding:0;margin:0 0 12px}
+.score{font-family:var(--serif);font-size:3.6rem;font-weight:700;line-height:1.2;margin:4px 0 10px;display:inline-block;background:linear-gradient(transparent 70%,color-mix(in srgb,var(--gold) 55%,transparent) 70%)}
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:16px}
+.rv{padding:14px 0;border-top:1px solid var(--line)}
+.rv .o{padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;margin-top:8px}
+.rv .ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.rv .no{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.rv small{color:var(--mute)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.pho{display:none}
+@page{margin:14mm}
+@media print{
+:root{--bg:#fff;--card:#fff;--ink:#000;--mute:#444;--line:#bbb;--accent:#1c2154;--ok:#1d7a52;--bad:#b83a3a}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{background:#fff!important;background-image:none!important;padding:0;color:#000}
+.wrap{max-width:none;padding:0}
+.wrap>section:not(#res){display:none!important}
+#res{display:block!important;border:0;padding:0}
+button{display:none!important}
+.pho{display:block;margin-bottom:10px;font-weight:600}
+.rv{break-inside:avoid}
+.score{font-size:2.4rem}
+}
 </style>
-  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
+
+<section id="loading" class="card"><h2>লোড হচ্ছে...</h2><p>একটু অপেক্ষা করুন।</p></section>
 
 <section id="auth" class="card hide">
   <h1 id="atitle">লগইন করুন</h1>
@@ -57,6 +101,7 @@ button:disabled{opacity:.4}
   </div>
   <div class="card"><h2>পরীক্ষাসমূহ</h2><div id="exams"></div></div>
   <div class="card"><h2>আমার আগের ফলাফল</h2><div id="past"></div></div>
+  <p style="text-align:center;font-size:.75rem;opacity:.6">সংস্করণ: পর্যালোচনা-v3</p>
 </section>
 
 <section id="exam" class="hide">
@@ -70,22 +115,26 @@ button:disabled{opacity:.4}
 </section>
 
 <section id="res" class="card hide">
+  <div id="phead" class="pho"></div>
   <h1>আপনার ফলাফল</h1>
   <div class="score" id="score"></div>
   <p id="rmsg"></p>
-  <button id="back">হোমে ফিরুন</button>
+  <div id="review"></div>
+  <button id="pdf">PDF ডাউনলোড</button>
+  <button class="ghost" id="back">হোমে ফিরুন</button>
 </section>
 
 </div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 var SUPABASE_URL="https://knjfubfnhwqruqehsqbq.supabase.co";
 var SUPABASE_KEY="sb_publishable_pX5j7jDmv7HIde8FlmLXzA_Obx8kmFu";
 var db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 var $=function(i){return document.getElementById(i)};
 var bn=function(n){return String(n).replace(/\d/g,function(d){return "০১২৩৪৫৬৭৮৯"[d]})};
-var user,exam,qs,ans,cur,left,tick,signup=false;
+var user,exam,qs,ans,cur,left,tick,signup=false,rtitle="";
 
-function show(id){["auth","reset","home","exam","res"].forEach(function(s){$(s).classList.toggle("hide",s!==id)})}
+function show(id){$("loading").classList.add("hide");["auth","reset","home","exam","res"].forEach(function(s){$(s).classList.toggle("hide",s!==id)})}
 function uname(){return (user.user_metadata&&user.user_metadata.full_name)||user.email}
 
 $("aswitch").onclick=function(){
@@ -110,6 +159,7 @@ $("abtn").onclick=async function(){
 $("logout").onclick=function(){db.auth.signOut()};
 
 var recovering=location.hash.indexOf("type=recovery")>=0;
+setTimeout(function(){if(!user&&!$("loading").classList.contains("hide"))show("auth")},4000);
 db.auth.onAuthStateChange(function(ev,session){
   user=session?session.user:null;
   if(!user){clearInterval(tick);show("auth");return}
@@ -143,7 +193,7 @@ async function home(){
     var d=document.createElement("div");d.className="row";
     d.innerHTML="<span>"+x.title+" ("+bn(x.duration_minutes)+" মিনিট)</span>";
     var b=document.createElement("button");b.textContent="শুরু করুন";
-    if(taken.indexOf(x.id)>=0){b.textContent="দেওয়া হয়েছে";b.disabled=true}
+    if(taken.indexOf(x.id)>=0){b.textContent="পর্যালোচনা দেখুন";b.className="ghost";b.onclick=function(){openOld(x)}}
     else b.onclick=function(){start(x)};
     d.appendChild(b);$("exams").appendChild(d);
   });
@@ -203,8 +253,52 @@ async function finish(){
   var tm=qs.reduce(function(a,z){return a+(z.marks||1)},0);
   $("score").textContent=bn(r.data)+" / "+bn(tm);
   $("rmsg").textContent=r.data/tm>=.5?"ভালো করেছেন!":"আরও অনুশীলন করুন।";
+  rtitle=exam.title;
+  $("review").innerHTML="লোড হচ্ছে...";
   show("res");
+  var sv=await db.rpc("save_answers",{p_exam_id:exam.id,p_answers:ans});
+  if(sv.error)alert("উত্তর সংরক্ষণ হয়নি: "+sv.error.message);
+  loadReview(exam);
 }
+
+async function loadReview(x){
+  var box=$("review");box.innerHTML="";
+  var q=await db.from("questions").select("*").eq("exam_id",x.id).order("id");
+  var r=await db.rpc("get_review",{p_exam_id:x.id});
+  if(q.error||r.error||!r.data){box.textContent="পর্যালোচনা পাওয়া যায়নি"+((q.error||r.error)?": "+(q.error||r.error).message:"।");return}
+  var keys=r.data.keys||{},saved=r.data.answers,has=!!saved;
+  saved=saved||{};
+  var h=document.createElement("h2");h.textContent="উত্তর পর্যালোচনা";box.appendChild(h);
+  if(!has){var n0=document.createElement("p");n0.textContent="এই পরীক্ষার আপনার উত্তর সংরক্ষিত নেই, শুধু সঠিক উত্তর দেখানো হচ্ছে।";box.appendChild(n0)}
+  q.data.forEach(function(qq,n){
+    var c=keys[qq.id],u=saved[qq.id];
+    var d=document.createElement("div");d.className="rv";
+    var t=document.createElement("div");
+    t.textContent=bn(n+1)+". "+qq.body+(has?" "+(u===undefined?"⚪":u===c?"✅":"❌"):"");
+    d.appendChild(t);
+    qq.options.forEach(function(o,i){
+      var el=document.createElement("div");el.className="o"+(i===c?" ok":(has&&i===u?" no":""));
+      el.textContent=o+(i===c?"  ✔ সঠিক":"")+(has&&i===u&&i!==c?"  ✘ আপনার উত্তর":"");
+      d.appendChild(el);
+    });
+    if(has&&u===undefined){var sm=document.createElement("small");sm.textContent="উত্তর দেননি";d.appendChild(sm)}
+    box.appendChild(d);
+  });
+}
+async function openOld(x){
+  var rs=await db.from("results").select("*").eq("exam_id",x.id).order("created_at",{ascending:false}).limit(1);
+  var row=rs.data&&rs.data[0];
+  $("score").textContent=row?bn(row.score)+" / "+bn(row.total):"";
+  $("rmsg").textContent=x.title;rtitle=x.title;
+  $("review").innerHTML="লোড হচ্ছে...";
+  show("res");
+  loadReview(x);
+}
+$("pdf").onclick=function(){
+  $("phead").textContent=uname()+" — "+rtitle+" — "+new Date().toLocaleDateString("bn-BD");
+  var t0=document.title;document.title="উত্তরপত্র - "+rtitle;
+  window.print();document.title=t0;
+};
 $("back").onclick=home;
 </script>
 </body>
