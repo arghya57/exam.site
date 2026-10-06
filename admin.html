@@ -5,31 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>অ্যাডমিন প্যানেল</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600&family=Noto+Serif+Bengali:wght@500;700&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#1c2154">
 <style>
-:root{--bg:#f3f6f4;--card:#fff;--ink:#14231c;--mute:#5d6f66;--line:#d5dfd9;--accent:#1f6f50;--bad:#b3362f}
-@media (prefers-color-scheme:dark){:root{--bg:#101a15;--card:#18251e;--ink:#e8f1ec;--mute:#9bb0a4;--line:#2b3d33;--accent:#4fb88a;--bad:#ef7b73}}
+:root{--bg:#eef0f8;--card:#fff;--ink:#181c44;--mute:#5b6088;--line:#d9dcee;--accent:#1c2154;--on:#fff;--gold:#f0a81c;--ok:#1d7a52;--bad:#b83a3a;--serif:"Noto Serif Bengali","Hind Siliguri",serif;--sans:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1230;--card:#181c44;--ink:#eceefb;--mute:#a3a8d1;--line:#2d3270;--accent:#f0a81c;--on:#181c44;--gold:#f0a81c;--ok:#5fd3a0;--bad:#ff8c8c}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif;line-height:1.6}
-.wrap{max-width:720px;margin:0 auto;padding:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
-h1{font-size:1.4rem;margin:0 0 8px} h2{font-size:1.1rem;margin:0 0 10px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:1.02rem;line-height:1.7;
+  background-image:radial-gradient(circle at 7px 7px,var(--gold) 2.2px,transparent 2.6px),linear-gradient(#1c2154,#1c2154);
+  background-size:18px 14px,100% 14px;background-repeat:repeat-x,no-repeat;background-position:0 0,0 0;padding-top:14px}
+.wrap{max-width:720px;margin:0 auto;padding:24px 16px 48px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px 22px 6px 22px;padding:22px;margin-bottom:18px}
+h1,h2{font-family:var(--serif);color:var(--ink);line-height:1.4}
+h1{font-size:1.5rem;margin:0 0 12px;font-weight:700}
+h2{font-size:1.12rem;margin:0 0 12px;font-weight:700;padding-bottom:8px;border-bottom:2px solid var(--gold);display:inline-block}
 p{margin:0 0 10px;color:var(--mute)}
-input,select{width:100%;padding:10px;font:inherit;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);margin:4px 0 8px}
-button{font:inherit;border:0;border-radius:10px;padding:10px 16px;background:var(--accent);color:#fff;cursor:pointer;margin-right:6px}
-button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
-button.del{background:var(--bad)}
-.tabs{display:flex;gap:6px;margin-bottom:14px}
+summary{cursor:pointer;font-weight:500;padding:6px 0}
+input,select,textarea{width:100%;padding:12px 14px;font:inherit;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);margin:4px 0 10px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:3px solid color-mix(in srgb,var(--gold) 70%,transparent);outline-offset:2px;border-color:var(--gold)}
+button{font:inherit;font-weight:500;border:0;border-radius:12px;padding:11px 18px;background:var(--accent);color:var(--on);cursor:pointer;margin:0 6px 6px 0;transition:transform .12s}
+button:active{transform:scale(.97)}
+button.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+button.del{background:var(--bad);color:#fff}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
 .tabs button{flex:1;margin:0}
-.qb{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
-.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.qb{border:1.5px solid var(--line);border-left:5px solid var(--gold);border-radius:6px 16px 6px 16px;padding:14px;margin-bottom:14px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
-.err{color:var(--bad);min-height:1.4em} .ok{color:var(--accent)}
+.err{color:var(--bad);min-height:1.4em} .ok{color:var(--ok);font-weight:500}
 .hide{display:none}
 .tw{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:.95rem}
-td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-family:var(--serif);font-weight:700;background:var(--bg)}
+td,th{padding:10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
@@ -56,17 +68,27 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left;white-spac
   </div>
 
   <div id="t-new" class="card">
-    <h2>নতুন পরীক্ষা যোগ করুন</h2>
+    <h2 id="formtitle">নতুন পরীক্ষা যোগ করুন</h2>
     <input id="title" placeholder="পরীক্ষার নাম">
     <input id="dur" type="number" min="1" value="10" placeholder="সময় (মিনিট)">
+    <details style="margin:8px 0 14px">
+      <summary>পেস্ট করে একসঙ্গে প্রশ্ন যোগ করুন</summary>
+      <p>প্রতিটি প্রশ্নের নিচে ক) খ) গ) ঘ) অপশন, তারপর <b>উত্তর: খ</b> ও ঐচ্ছিক <b>নম্বর: 2</b>। দুই প্রশ্নের মাঝে একটা ফাঁকা লাইন দিন।</p>
+      <textarea id="paste" rows="10" style="width:100%;padding:10px;font:inherit;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)"></textarea>
+      <button class="ghost" id="doPaste" style="margin-top:6px">ফর্মে সাজান</button>
+    </details>
     <div id="qs"></div>
     <button class="ghost" id="addq">+ প্রশ্ন যোগ</button>
     <button id="save">পরীক্ষা সংরক্ষণ করুন</button>
+    <button class="ghost" onclick="location.reload()">বাতিল / নতুন ফর্ম</button>
     <div id="msg" class="err"></div>
   </div>
 
   <div id="t-list" class="card hide"><h2>সব পরীক্ষা</h2><div id="exams"></div></div>
-  <div id="t-res" class="card hide"><h2>স্টুডেন্টদের ফলাফল</h2><div class="tw" id="results"></div></div>
+  <div id="t-res" class="card hide"><h2>স্টুডেন্টদের ফলাফল</h2><div class="tw" id="results"></div>
+    <h2 style="margin-top:20px">কে কোন পরীক্ষা শুরু করেছে</h2>
+    <p>যার নেট বা ফোনের সমস্যা হয়েছে, তাকে এখান থেকে আবার সুযোগ দিন। আগের ফলাফল (থাকলে) মুছে যাবে।</p>
+    <div class="tw" id="tries"></div></div>
 
   <button class="ghost" id="lo2">লগআউট</button>
 </section>
@@ -99,11 +121,11 @@ document.querySelectorAll(".tabs button").forEach(function(b){
     b.className="";
     ["new","list","res"].forEach(function(t){$("t-"+t).classList.toggle("hide",t!==b.dataset.t)});
     if(b.dataset.t==="list")loadExams();
-    if(b.dataset.t==="res")loadResults();
+    if(b.dataset.t==="res"){loadResults();loadTries()}
   };
 });
 
-function addQ(){
+function addQ(pre){
   var n=$("qs").children.length+1;
   var d=el("div",null,"qb");
   d.appendChild(el("b","প্রশ্ন "+bn(n)));
@@ -112,9 +134,40 @@ function addQ(){
   var s=el("select");s.className="corr";
   ["ক","খ","গ","ঘ"].forEach(function(l,i){var o=el("option","সঠিক উত্তর: "+l);o.value=i;s.appendChild(o)});
   d.appendChild(s);
+  var mk=el("input");mk.type="number";mk.min=1;mk.value=pre?pre.marks:1;mk.className="marks";
+  d.appendChild(el("span","এই প্রশ্নের নম্বর:"));d.appendChild(mk);
+  if(pre){q.value=pre.body;d.querySelectorAll(".opt").forEach(function(o,i){o.value=pre.options[i]});s.value=pre.correct}
   $("qs").appendChild(d);
 }
-$("addq").onclick=addQ;
+var editId=null;
+$("addq").onclick=function(){addQ()};
+function bd(s){return s.replace(/[০-৯]/g,function(d){return "০১২৩৪৫৬৭৮৯".indexOf(d)})}
+function li(s){var c=bd(s.trim()).charAt(0).toUpperCase();var i="কখগঘ".indexOf(c);if(i<0)i="ABCD".indexOf(c);if(i<0)i="1234".indexOf(c);return i}
+$("doPaste").onclick=function(){
+  var m=$("msg"),bad=[],ok=0,ex=$("qs").children;
+  for(var j=ex.length-1;j>=0;j--){
+    var b0=ex[j];
+    if(!b0.querySelector(".qbody").value.trim()&&[].every.call(b0.querySelectorAll(".opt"),function(o){return !o.value.trim()}))b0.remove();
+  }
+  $("paste").value.split(/\n\s*\n/).forEach(function(bl,n){
+    var ls=bl.split("\n").map(function(x){return x.trim()}).filter(Boolean);
+    if(!ls.length)return;
+    var body=[],opts=[],ans=-1,marks=1;
+    ls.forEach(function(l){
+      var r;
+      if(r=l.match(/^(?:উত্তর|ans(?:wer)?)\s*[:：\-]\s*(.+)$/i))ans=li(r[1]);
+      else if(r=l.match(/^(?:নম্বর|marks?)\s*[:：\-]\s*(\S+)/i))marks=parseInt(bd(r[1]))||1;
+      else if(body.length&&(r=l.match(/^\(?\s*([কখগঘA-Da-d1-4১-৪])\s*[\)\.।:\-]\s*(.+)$/)))opts[li(r[1])]=r[2];
+      else if(!opts.length)body.push(l);
+    });
+    var q=body.join(" ").replace(/^\s*[\d০-৯]+\s*[\.\)।]\s*/,"").trim();
+    if(!q||ans<0||![0,1,2,3].every(function(i){return opts[i]})){bad.push(bn(n+1));return}
+    addQ({body:q,options:opts,correct:ans,marks:Math.max(1,marks)});ok++;
+  });
+  m.className=ok?"ok":"err";
+  m.textContent=ok?bn(ok)+"টি প্রশ্ন নিচে যোগ হয়েছে"+(bad.length?"। ছাঁচ ঠিক না থাকায় বাদ গেছে ব্লক নং: "+bad.join(", "):"")+"। দেখে নিয়ে সংরক্ষণ করুন।":"কোনো প্রশ্ন বোঝা যায়নি। ছাঁচ মিলিয়ে দেখুন (প্রশ্ন, চারটি অপশন, উত্তর)।";
+  if(ok)$("paste").value="";
+};
 
 $("save").onclick=async function(){
   var m=$("msg");m.className="err";m.textContent="";
@@ -127,19 +180,37 @@ $("save").onclick=async function(){
     var opts=[].map.call(b.querySelectorAll(".opt"),function(x){return x.value.trim()});
     if(!body&&opts.every(function(o){return !o}))continue;
     if(!body||opts.some(function(o){return !o})){m.textContent="প্রশ্ন "+bn(i+1)+": প্রশ্ন ও চারটি অপশনই লিখুন।";return}
-    items.push({body:body,options:opts,correct:parseInt(b.querySelector(".corr").value)});
+    items.push({body:body,options:opts,correct:parseInt(b.querySelector(".corr").value),marks:Math.max(1,parseInt(b.querySelector(".marks").value)||1)});
   }
   if(!items.length){m.textContent="অন্তত একটি প্রশ্ন দিন।";return}
-  var e=await db.from("exams").insert({title:title,duration_minutes:dur}).select().single();
+  var e;
+  if(editId){
+    e=await db.from("exams").update({title:title,duration_minutes:dur}).eq("id",editId).select().single();
+    if(!e.error){var dq=await db.from("questions").delete().eq("exam_id",editId);if(dq.error){m.textContent="ত্রুটি: "+dq.error.message;return}}
+  }else e=await db.from("exams").insert({title:title,duration_minutes:dur}).select().single();
   if(e.error){m.textContent="ত্রুটি: "+e.error.message;return}
-  var q=await db.from("questions").insert(items.map(function(x){return {exam_id:e.data.id,body:x.body,options:x.options}})).select();
+  var q=await db.from("questions").insert(items.map(function(x){return {exam_id:e.data.id,body:x.body,options:x.options,marks:x.marks}})).select();
   if(q.error){m.textContent="ত্রুটি: "+q.error.message;return}
   var keys=q.data.map(function(row,i){return {question_id:row.id,correct:items[i].correct}});
   var k=await db.from("answer_keys").insert(keys);
   if(k.error){m.textContent="ত্রুটি: "+k.error.message;return}
   m.className="ok";m.textContent="সংরক্ষণ হয়েছে ("+bn(items.length)+"টি প্রশ্ন)।";
-  $("title").value="";$("qs").innerHTML="";addQ();
+  editId=null;$("formtitle").textContent="নতুন পরীক্ষা যোগ করুন";
+  $("title").value="";$("dur").value=10;$("qs").innerHTML="";addQ();
 };
+
+async function editExam(x){
+  var q=await db.from("questions").select("*").eq("exam_id",x.id).order("id");
+  if(q.error){alert("লোড করা যায়নি: "+q.error.message);return}
+  var k=await db.from("answer_keys").select("*").in("question_id",q.data.map(function(r){return r.id}));
+  if(k.error){alert("লোড করা যায়নি: "+k.error.message);return}
+  var key={};k.data.forEach(function(r){key[r.question_id]=r.correct});
+  editId=x.id;
+  $("title").value=x.title;$("dur").value=x.duration_minutes;$("qs").innerHTML="";
+  q.data.forEach(function(r){addQ({body:r.body,options:r.options,correct:key[r.id],marks:r.marks})});
+  $("formtitle").textContent="এডিট: "+x.title;$("msg").textContent="";
+  document.querySelector('.tabs button[data-t="new"]').click();
+}
 
 async function loadExams(){
   var r=await db.from("exams").select("*").order("id",{ascending:false});
@@ -148,6 +219,7 @@ async function loadExams(){
   r.data.forEach(function(x){
     var row=el("div",null,"row");
     row.appendChild(el("span",x.title+" ("+bn(x.duration_minutes)+" মিনিট)"));
+    var ed=el("button","এডিট");ed.onclick=function(){editExam(x)};
     var d=el("button","মুছুন","del");
     d.onclick=async function(){
       if(!confirm("\""+x.title+"\" মুছে ফেলবেন? এর প্রশ্ন ও ফলাফলও মুছে যাবে।"))return;
@@ -155,8 +227,30 @@ async function loadExams(){
       var e=await db.from("exams").delete().eq("id",x.id);
       if(e.error)alert(e.error.message);else loadExams();
     };
-    row.appendChild(d);box.appendChild(row);
+    var bs=el("span");bs.appendChild(ed);bs.appendChild(d);row.appendChild(bs);box.appendChild(row);
   });
+}
+
+async function loadTries(){
+  var r=await db.rpc("admin_attempts");
+  var box=$("tries");box.innerHTML="";
+  if(r.error){box.textContent="ত্রুটি: "+r.error.message;return}
+  if(!r.data.length){box.textContent="কেউ এখনও পরীক্ষা শুরু করেনি।";return}
+  var t=el("table"),h=el("tr");
+  ["ইমেইল","পরীক্ষা","অবস্থা",""].forEach(function(x){h.appendChild(el("th",x))});
+  t.appendChild(h);
+  r.data.forEach(function(x){
+    var tr=el("tr");
+    [x.email,x.exam_title,x.submitted?"জমা দিয়েছে":"শুরু করেছে, জমা হয়নি"].forEach(function(c){tr.appendChild(el("td",c))});
+    var td=el("td"),b=el("button","আবার সুযোগ দিন","ghost");
+    b.onclick=async function(){
+      if(!confirm(x.email+" কে \""+x.exam_title+"\" আবার দেওয়ার সুযোগ দেবেন? আগের ফলাফল মুছে যাবে।"))return;
+      var q=await db.rpc("admin_reset",{p_user:x.user_id,p_exam:x.exam_id});
+      if(q.error)alert(q.error.message);else{loadResults();loadTries()}
+    };
+    td.appendChild(b);tr.appendChild(td);t.appendChild(tr);
+  });
+  box.appendChild(t);
 }
 
 async function loadResults(){
@@ -164,13 +258,19 @@ async function loadResults(){
   var box=$("results");box.innerHTML="";
   if(!r.data||!r.data.length){box.textContent="এখনও কেউ পরীক্ষা দেয়নি।";return}
   var t=el("table"),h=el("tr");
-  ["নাম","পরীক্ষা","স্কোর","তারিখ"].forEach(function(x){h.appendChild(el("th",x))});
+  ["নাম","পরীক্ষা","স্কোর","তারিখ",""].forEach(function(x){h.appendChild(el("th",x))});
   t.appendChild(h);
   r.data.forEach(function(x){
     var tr=el("tr");
     [x.student_name,x.exams?x.exams.title:"-",bn(x.score)+" / "+bn(x.total),new Date(x.created_at).toLocaleString("bn-BD")]
       .forEach(function(c){tr.appendChild(el("td",c))});
-    t.appendChild(tr);
+    var td=el("td"),dl=el("button","মুছুন","del");
+    dl.onclick=async function(){
+      if(!confirm("এই ফলাফল মুছবেন? (স্টুডেন্ট আবার পরীক্ষা দিতে পারবে না, সুযোগ দিতে নিচের তালিকা ব্যবহার করুন)"))return;
+      var q=await db.from("results").delete().eq("id",x.id);
+      if(q.error)alert(q.error.message);else loadResults();
+    };
+    td.appendChild(dl);tr.appendChild(td);t.appendChild(tr);
   });
   box.appendChild(t);
 }
