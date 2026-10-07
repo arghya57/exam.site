@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exam Site by Arghya</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://knjfubfnhwqruqehsqbq.supabase.co">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+:root{--bg:#f3f6f4;--card:#fff;--ink:#14231c;--mute:#5d6f66;--line:#d5dfd9;--accent:#1f6f50;--bad:#b3362f}
+@media (prefers-color-scheme:dark){:root{--bg:#101a15;--card:#18251e;--ink:#e8f1ec;--mute:#9bb0a4;--line:#2b3d33;--accent:#4fb88a;--bad:#ef7b73}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif;line-height:1.6}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:14px}
+h1{font-size:1.4rem;margin:0 0 8px} h2{font-size:1.1rem;margin:0 0 8px}
+p{margin:0 0 10px;color:var(--mute)}
+input{width:100%;padding:12px;font:inherit;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);margin:4px 0 12px}
+button{font:inherit;border:0;border-radius:10px;padding:11px 18px;background:var(--accent);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:disabled{opacity:.4}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.opt{display:flex;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;cursor:pointer}
+.opt.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.bar{position:sticky;top:0;background:var(--bg);display:flex;justify-content:space-between;padding:10px 0;font-weight:700}
+.low{color:var(--bad)} .err{color:var(--bad);min-height:1.4em}
+.hide{display:none} .score{font-size:3rem;font-weight:700}
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:14px}
+.rq{border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
+.ro{padding:4px 8px;border-radius:6px;margin:4px 0}
+.good{background:rgba(31,122,69,.2);font-weight:700}
+.wrong{background:rgba(179,54,47,.2)}
+.st{font-size:.85rem;font-weight:700;margin:4px 0}
+.st-ok{color:#1f7a45}.st-bad{color:#b3362f}.st-sk{color:#b8731a}
+@media print{
+:root{--bg:#fff;--card:#fff;--ink:#000;--mute:#333;--line:#999;--accent:#000}
+body{background:#fff;color:#000}
+.noprint{display:none!important}
+section:not(#rev){display:none!important}
+.card{border:0;padding:0}
+.rq{break-inside:avoid}
+}
+
+
+:root{--bg:#f3f6f4;--card:#fff;--ink:#14231c;--mute:#5d6f66;--line:#d5dfd9;--accent:#1f6f50;--bad:#b3362f}
+@media (prefers-color-scheme:dark){:root{--bg:#101a15;--card:#18251e;--ink:#e8f1ec;--mute:#9bb0a4;--line:#2b3d33;--accent:#4fb88a;--bad:#ef7b73}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif;line-height:1.6}
+.wrap{max-width:720px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
+h1{font-size:1.4rem;margin:0 0 8px} h2{font-size:1.1rem;margin:0 0 10px}
+p{margin:0 0 10px;color:var(--mute)}
+input,select{width:100%;padding:10px;font:inherit;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);margin:4px 0 8px}
+button{font:inherit;border:0;border-radius:10px;padding:10px 16px;background:var(--accent);color:#fff;cursor:pointer;margin-right:6px}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button.del{background:var(--bad)}
+.tabs{display:flex;gap:6px;margin-bottom:14px}
+.tabs button{flex:1;margin:0}
+.qb{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.err{color:var(--bad);min-height:1.4em} .ok{color:var(--accent)}
+.hide{display:none}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.rq{border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
+.ro{padding:4px 8px;border-radius:6px;margin:4px 0}
+.good{background:rgba(31,122,69,.2);font-weight:700}
+.wrong{background:rgba(179,54,47,.2)}
+.st{font-size:.85rem;font-weight:700;margin:4px 0}
+.st-ok{color:#1f7a45}.st-bad{color:#b3362f}.st-sk{color:#b8731a}
+@media print{
+:root{--bg:#fff;--card:#fff;--ink:#000;--mute:#333;--line:#999;--accent:#000}
+body{background:#fff;color:#000}
+.noprint{display:none!important}
+section:not(#rev){display:none!important}
+.card{border:0;padding:0}
+.rq{break-inside:avoid}
+}
+
+
+:root{--bg:#f5f3ff;--card:#fff;--ink:#1e1b3a;--mute:#6b6a85;--line:#e4e0f7;--accent:#6d5ae6;--bad:#e11d48;--a1:#6d5ae6;--a2:#ec4899;--a3:#f59e0b;--a4:#14b8a6;--a5:#3b82f6}
+@media (prefers-color-scheme:dark){:root{--bg:#12102a;--card:#1c1a3a;--ink:#f1efff;--mute:#a9a6cf;--line:#34305e;--accent:#9d8cff;--bad:#fb7185}}
+body{font-family:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif;background:radial-gradient(circle at 0% 0%,rgba(109,90,230,.22),transparent 45%),radial-gradient(circle at 100% 8%,rgba(236,72,153,.18),transparent 40%),var(--bg);background-attachment:fixed}
+.card{border-radius:18px;box-shadow:0 10px 28px rgba(90,70,200,.12)}
+button{background:linear-gradient(135deg,var(--a1),var(--a2));box-shadow:0 4px 12px rgba(109,90,230,.3);transition:transform .15s}
+button:active{transform:scale(.96)}
+button.ghost,button.del{box-shadow:none}
+input,select{border-radius:12px}
+input:focus,select:focus{outline:2px solid var(--a1);border-color:transparent}
+.brand{display:flex;align-items:center;gap:12px;margin:4px 0 16px}
+.brand .logo{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:1.5rem;background:linear-gradient(135deg,var(--a1),var(--a2),var(--a3));box-shadow:0 6px 16px rgba(236,72,153,.35)}
+.brand .bn{font-weight:700;font-size:1.3rem;line-height:1.2;background:linear-gradient(90deg,var(--a1),var(--a2),var(--a3));-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand .tag{font-size:.85rem;color:var(--mute)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{font-size:.8rem;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--c,var(--a1)) 16%,transparent);border:1px solid color-mix(in srgb,var(--c,var(--a1)) 40%,transparent)}
+.xcard{--c:var(--a1);padding:14px;border-radius:16px;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--c)}
+.xcard.c1{--c:var(--a2)}.xcard.c2{--c:var(--a3)}.xcard.c3{--c:var(--a4)}.xcard.c4{--c:var(--a5)}
+.xcard .xt{font-weight:700;font-size:1.05rem}
+.xcard button{width:100%;margin-top:6px;background:linear-gradient(135deg,var(--c),var(--a2))}
+#exams{display:grid;gap:12px}
+#home>.card:first-child{background:linear-gradient(135deg,#6d5ae6,#ec4899 60%,#f59e0b);color:#fff;border:0}
+#home>.card:first-child h1{color:#fff}
+#home>.card:first-child .chip{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.45);color:#fff}
+#home>.card:first-child button.ghost{color:#fff;border-color:rgba(255,255,255,.7)}
+.bar{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:0 6px 18px rgba(90,70,200,.12);align-items:center;margin-bottom:8px}
+#timer{background:linear-gradient(135deg,var(--a4),var(--a5));color:#fff;padding:4px 14px;border-radius:999px;font-variant-numeric:tabular-nums}
+#timer.low{background:var(--bad);color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.08)}}
+.pbar{height:8px;border-radius:99px;background:var(--line);margin:6px 0 12px;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a4),var(--a1),var(--a2));transition:width .3s}
+.opt{padding:14px;border-radius:14px;border-width:2px;font-size:1.02rem;transition:.15s}
+.opt:active{transform:scale(.98)}
+.opt.sel{border-color:var(--a1);background:color-mix(in srgb,var(--a1) 14%,transparent)}
+#res{text-align:center}
+.score{font-size:1.6rem}
+.ring{--p:0;width:150px;height:150px;border-radius:50%;margin:10px auto;display:grid;place-items:center;background:conic-gradient(var(--a4) calc(var(--p)*1%),var(--line) 0)}
+.ring::before{content:"";grid-area:1/1;width:118px;height:118px;border-radius:50%;background:var(--card)}
+.ring b{grid-area:1/1;font-size:1.8rem;z-index:1}
+.cf{position:fixed;top:-20px;width:10px;height:14px;z-index:99;pointer-events:none;animation:fall 2.6s linear forwards}
+@keyframes fall{to{transform:translateY(105vh) rotate(720deg)}}
+.sumgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.sc{border-radius:16px;padding:12px;color:#fff}
+.sc b{display:block;font-size:1.6rem}.sc span{font-size:.85rem}
+.s1{background:linear-gradient(135deg,var(--a1),var(--a5))}.s2{background:linear-gradient(135deg,var(--a2),var(--a3))}
+.s3{background:linear-gradient(135deg,var(--a4),var(--a5))}.s4{background:linear-gradient(135deg,var(--a3),var(--a2))}
+.dots{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.dots b{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:.85rem;border:1px solid var(--line);cursor:pointer}
+.dots b.done{background:linear-gradient(135deg,var(--a4),var(--a5));color:#fff;border-color:transparent}
+.dots b.cur{outline:2px solid var(--a2)}
+#revbody{display:flex;flex-direction:column}
+.prhead{font-weight:700;color:var(--a1);border-bottom:2px solid var(--a1);padding-bottom:6px;margin-bottom:10px}
+.sig{display:none;order:99;justify-content:space-between;margin-top:40px}
+.hrow{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.hrow .hp{min-width:56px;text-align:center;font-weight:700;border-radius:10px;padding:4px 8px;background:linear-gradient(135deg,var(--a3),var(--a2));color:#fff}
+@media print{.sig{display:flex}}
+@media print{:root{--bg:#fff;--card:#fff;--ink:#000;--mute:#333;--line:#999;--accent:#000}body{background:#fff}.brand{display:none!important}.card{box-shadow:none}}
+
+.wrap{max-width:640px}body.admin .wrap{max-width:720px}
+
+</style>
+</head>
+<body>
+<div id="root"></div>
+<template id="tpl-student">
+<div class="wrap">
+<header class="brand"><span class="logo">📝</span><div><div class="bn">Exam Site by Arghya</div><div class="tag">জানো · শেখো · এগিয়ে যাও</div></div></header>
+
+<section id="loading" class="card"><h2>লোড হচ্ছে...</h2><p>একটু অপেক্ষা করুন।</p></section>
+
+<section id="auth" class="card hide">
+  <h1 id="atitle">লগইন করুন</h1>
+  <div id="nameBox" class="hide"><label>নাম</label><input id="fname" autocomplete="name"></div>
+  <label>ইমেইল</label><input id="email" type="email" autocomplete="email">
+  <label>পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)</label><input id="pass" type="password" autocomplete="current-password">
+  <div class="err" id="aerr"></div>
+  <button id="abtn">লগইন</button>
+  <button class="ghost" id="aswitch">নতুন অ্যাকাউন্ট খুলুন</button>
+  <button class="ghost" id="forgot">পাসওয়ার্ড ভুলে গেছেন?</button>
+</section>
+
+<section id="reset" class="card hide">
+  <h1>নতুন পাসওয়ার্ড দিন</h1>
+  <input id="npass" type="password" placeholder="নতুন পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)">
+  <div class="err" id="rerr"></div>
+  <button id="rbtn">পাসওয়ার্ড বদলান</button>
+</section>
+
+<section id="home" class="hide">
+  <div class="card">
+    <h1 id="hello"></h1>
+    <div class="chips" id="stats"></div>
+    <button class="ghost" id="logout">লগআউট</button>
+    <button class="ghost hide" id="adminbtn">🛠 অ্যাডমিন প্যানেল</button>
+  </div>
+  <div class="card"><h2>📚 পরীক্ষাসমূহ</h2><div id="exams"></div></div>
+  <div class="card"><h2>🏆 আমার আগের ফলাফল</h2><div id="past"></div></div>
+</section>
+
+<section id="exam" class="hide">
+  <div class="bar"><span id="etitle"></span><span id="timer"></span></div>
+  <div class="pbar"><i id="pfill"></i></div>
+  <div class="card">
+    <div id="qn" style="color:var(--mute)"></div>
+    <h2 id="q"></h2><p style="font-size:.9rem">সতর্কতা: একবার অপশন বেছে নিলে আর বদলানো যাবে না।</p><div id="opts"></div>
+    <div class="nav"><button class="ghost" id="prev">আগের</button><button class="ghost" id="next">পরের</button></div>
+    <div class="dots" id="qdots"></div>
+  </div>
+  <button id="submit">জমা দিন</button>
+</section>
+
+<section id="rev" class="card hide">
+  <div id="revbody"></div>
+  <div class="noprint" style="margin-top:14px"><p class="noprint" style="font-size:.9rem">PDF ডাউনলোডে চাপলে যে প্রিন্ট মেনু আসবে, সেখান থেকে "PDF হিসেবে সংরক্ষণ" (Save as PDF) বেছে নিন।</p><button id="revpdf">PDF ডাউনলোড</button> <button class="ghost" id="revback">পিছনে</button></div>
+</section>
+
+<section id="res" class="card hide">
+  <h1>🎯 আপনার ফলাফল</h1>
+  <div class="ring" id="ring"><b id="ringtxt"></b></div>
+  <div class="score" id="score"></div>
+  <p id="rmsg"></p>
+  <button id="back">হোমে ফিরুন</button>
+</section>
+
+</div>
+</template>
+<template id="tpl-admin">
+<div class="wrap">
+<header class="brand"><span class="logo">📝</span><div><div class="bn">Exam Site by Arghya</div><div class="tag">অ্যাডমিন প্যানেল</div></div></header>
+
+<section id="login" class="card hide">
+  <h1>অ্যাডমিন লগইন</h1>
+  <input id="email" type="email" placeholder="ইমেইল">
+  <input id="pass" type="password" placeholder="পাসওয়ার্ড">
+  <div class="err" id="lerr"></div>
+  <button id="lbtn">লগইন</button>
+</section>
+
+<section id="denied" class="card hide">
+  <h1>অনুমতি নেই</h1>
+  <p>এই অ্যাকাউন্ট অ্যাডমিন নয়।</p>
+  <button class="ghost" id="lo1">লগআউট</button>
+</section>
+
+<section id="rev" class="card hide">
+  <div id="revbody"></div>
+  <div class="noprint" style="margin-top:14px"><p class="noprint" style="font-size:.9rem">PDF ডাউনলোডে চাপলে যে প্রিন্ট মেনু আসবে, সেখান থেকে "PDF হিসেবে সংরক্ষণ" (Save as PDF) বেছে নিন।</p><button id="revpdf">PDF ডাউনলোড</button> <button class="ghost" id="revback">পিছনে</button></div>
+</section>
+
+<section id="panel" class="hide">
+  <div class="sumgrid" id="sum"></div>
+  <div class="tabs">
+    <button data-t="new">নতুন পরীক্ষা</button>
+    <button class="ghost" data-t="list">পরীক্ষা তালিকা</button>
+    <button class="ghost" data-t="res">ফলাফল</button>
+  </div>
+
+  <div id="t-new" class="card">
+    <h2 id="formtitle">নতুন পরীক্ষা যোগ করুন</h2>
+    <input id="title" placeholder="পরীক্ষার নাম">
+    <input id="dur" type="number" min="1" value="10" placeholder="সময় (মিনিট)">
+    <label>কতবার পরীক্ষা দেওয়া যাবে (০ লিখলে যতবার খুশি)</label>
+    <input id="att" type="number" min="0" value="1">
+    <label style="display:block;margin:6px 0"><input type="checkbox" id="shq" checked style="width:auto;margin:0 6px 0 0">প্রশ্নের ক্রম এলোমেলো করুন</label>
+    <label style="display:block;margin:6px 0 12px"><input type="checkbox" id="sho" checked style="width:auto;margin:0 6px 0 0">অপশনের ক্রম এলোমেলো করুন</label>
+    <label style="display:block;margin:6px 0 12px"><input type="checkbox" id="rvo" checked style="width:auto;margin:0 6px 0 0">পরীক্ষা শেষে স্টুডেন্ট নিজের উত্তরপত্র ও সঠিক উত্তর দেখতে পারবে</label>
+    <details style="margin:8px 0 14px">
+      <summary>পেস্ট করে একসঙ্গে প্রশ্ন যোগ করুন</summary>
+      <p>প্রতিটি প্রশ্নের নিচে ক) খ) গ) ঘ) অপশন, তারপর <b>উত্তর: খ</b> ও ঐচ্ছিক <b>নম্বর: 2</b>। দুই প্রশ্নের মাঝে একটা ফাঁকা লাইন দিন।</p>
+      <textarea id="paste" rows="10" style="width:100%;padding:10px;font:inherit;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)"></textarea>
+      <button class="ghost" id="doPaste" style="margin-top:6px">ফর্মে সাজান</button>
+    </details>
+    <div id="qs"></div>
+    <button class="ghost" id="addq">+ প্রশ্ন যোগ</button>
+    <button id="save">পরীক্ষা সংরক্ষণ করুন</button>
+    <button class="ghost" onclick="location.reload()">বাতিল / নতুন ফর্ম</button>
+    <div id="msg" class="err"></div>
+  </div>
+
+  <div id="t-list" class="card hide"><h2>সব পরীক্ষা</h2><div id="exams"></div></div>
+  <div id="t-res" class="card hide"><h2>স্টুডেন্টদের ফলাফল</h2>
+    <input id="rq" placeholder="🔍 নাম দিয়ে খুঁজুন">
+    <select id="rex"><option value="">সব পরীক্ষা</option></select><div class="tw" id="results"></div>
+    <h2 style="margin-top:20px">⚠️ সবচেয়ে বেশি ভুল হওয়া প্রশ্ন</h2>
+    <div id="hard"></div>
+    <h2 style="margin-top:20px">কে কোন পরীক্ষা শুরু করেছে</h2>
+    <p>যার নেট বা ফোনের সমস্যা হয়েছে, তাকে এখান থেকে আবার সুযোগ দিন। আগের ফলাফল (থাকলে) মুছে যাবে।</p>
+    <div class="tw" id="tries"></div></div>
+
+  <button class="ghost" id="lo2">লগআউট</button>
+  <button class="ghost" id="tostu">স্টুডেন্ট পেজ</button>
+</section>
+
+</div>
+</template>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+function startStudent(){
+
+var SUPABASE_URL="https://knjfubfnhwqruqehsqbq.supabase.co";
+var SUPABASE_KEY="sb_publishable_pX5j7jDmv7HIde8FlmLXzA_Obx8kmFu";
+var db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+var $=function(i){return document.getElementById(i)};
+var bn=function(n){return String(n).replace(/\d/g,function(d){return "০১২৩৪৫৬৭৮৯"[d]})};
+var user,exam,qs,ans,cur,left,tick,signup=false;
+
+function show(id){$("loading").classList.add("hide");["auth","reset","home","exam","res","rev"].forEach(function(s){$(s).classList.toggle("hide",s!==id)})}
+function uname(){return (user.user_metadata&&user.user_metadata.full_name)||user.email}
+
+$("aswitch").onclick=function(){
+  signup=!signup;
+  $("atitle").textContent=signup?"নতুন অ্যাকাউন্ট":"লগইন করুন";
+  $("abtn").textContent=signup?"অ্যাকাউন্ট খুলুন":"লগইন";
+  $("aswitch").textContent=signup?"আগে থেকেই অ্যাকাউন্ট আছে":"নতুন অ্যাকাউন্ট খুলুন";
+  $("nameBox").classList.toggle("hide",!signup);$("aerr").textContent="";
+};
+$("abtn").onclick=async function(){
+  var email=$("email").value.trim(),pass=$("pass").value;
+  $("aerr").textContent="";
+  var r;
+  if(signup){
+    r=await db.auth.signUp({email:email,password:pass,options:{data:{full_name:$("fname").value.trim()}}});
+    if(!r.error&&!r.data.session){$("aerr").textContent="ইমেইলে পাঠানো লিংকে চাপ দিয়ে নিশ্চিত করুন, তারপর লগইন করুন।";return}
+  }else{
+    r=await db.auth.signInWithPassword({email:email,password:pass});
+  }
+  if(r.error){$("aerr").textContent="ত্রুটি: "+r.error.message}
+};
+$("logout").onclick=function(){db.auth.signOut()};
+$("adminbtn").onclick=function(){location.hash="#admin"};
+
+var recovering=location.hash.indexOf("type=recovery")>=0;
+setTimeout(function(){if(!user&&!$("loading").classList.contains("hide"))show("auth")},4000);
+db.auth.onAuthStateChange(function(ev,session){
+  user=session?session.user:null;
+  if(!user){clearInterval(tick);show("auth");return}
+  if(ev==="PASSWORD_RECOVERY")recovering=true;
+  if(recovering){show("reset");return}
+  if(!$("exam").classList.contains("hide")||!$("rev").classList.contains("hide"))return;
+  home();
+});
+$("forgot").onclick=async function(){
+  var em=$("email").value.trim();
+  if(!em){$("aerr").textContent="আগে ইমেইল ঘরে ইমেইল লিখুন।";return}
+  var r=await db.auth.resetPasswordForEmail(em,{redirectTo:location.origin+"/"});
+  $("aerr").textContent=r.error?"ত্রুটি: "+r.error.message:"রিসেট লিংক ইমেইলে পাঠানো হয়েছে (স্প্যাম ফোল্ডারও দেখুন)।";
+};
+$("rbtn").onclick=async function(){
+  var p=$("npass").value;
+  if(p.length<6){$("rerr").textContent="কমপক্ষে ৬ অক্ষর দিন।";return}
+  var r=await db.auth.updateUser({password:p});
+  if(r.error){$("rerr").textContent="ত্রুটি: "+r.error.message;return}
+  recovering=false;home();
+};
+
+async function home(){
+  show("home");
+  $("hello").textContent="স্বাগতম, "+uname();
+  db.from("admins").select("user_id").maybeSingle().then(function(a){if(a.data)$("adminbtn").classList.remove("hide")});
+  var e=await db.from("exams").select("*").order("id");
+  var at=await db.from("attempts").select("exam_id");
+  var cnt={};(at.data||[]).forEach(function(a){cnt[a.exam_id]=(cnt[a.exam_id]||0)+1});
+  $("exams").innerHTML=(e.data&&e.data.length)?"":"কোনো পরীক্ষা নেই।";
+  (e.data||[]).forEach(function(x){
+    var d=document.createElement("div");d.className="row";
+    var u0=cnt[x.id]||0,m0=x.max_attempts==null?1:x.max_attempts;
+    d.className="xcard c"+(x.id%5);
+    d.innerHTML="<div class='xt'>"+esc(x.title)+"</div><div class='chips'><span class='chip'>⏱ "+bn(x.duration_minutes)+" মিনিট</span><span class='chip'>"+(m0>0?"🔁 চেষ্টা "+bn(u0)+"/"+bn(m0):"♾ যতবার খুশি")+"</span></div>";
+    var b=document.createElement("button");b.textContent="শুরু করুন";
+    var used=cnt[x.id]||0,mx=x.max_attempts==null?1:x.max_attempts;
+    if(mx>0&&used>=mx){b.textContent="দেওয়া হয়েছে";b.disabled=true}
+    else if(used>0){b.textContent="আবার দিন ("+bn(used)+"/"+(mx>0?bn(mx):"∞")+")";b.onclick=function(){start(x)}}
+    else b.onclick=function(){start(x)};
+    d.appendChild(b);$("exams").appendChild(d);
+  });
+  var r=await db.from("results").select("*, exams(title)").order("created_at",{ascending:false});
+  $("past").innerHTML=(r.data&&r.data.length)?"":"এখনও কোনো পরীক্ষা দেননি।";
+  var rs=r.data||[],sm=0,nn=0;
+  rs.forEach(function(z){if(z.total>0){sm+=z.score/z.total*100;nn++}});
+  $("stats").innerHTML="<span class='chip'>📝 "+bn(rs.length)+"টি পরীক্ষা দিয়েছেন</span>"+(nn?"<span class='chip'>⭐ গড় "+bn(Math.round(sm/nn))+"%</span>":"");
+  (r.data||[]).forEach(function(x){
+    var d=document.createElement("div");d.className="row";
+    d.innerHTML="<span>"+(x.exams?x.exams.title+" · ":"")+new Date(x.created_at).toLocaleDateString("bn-BD")+"</span><b>"+bn(x.score)+" / "+bn(x.total)+"</b>";
+    var rb=document.createElement("button");rb.textContent="উত্তরপত্র";rb.className="ghost";
+    rb.onclick=async function(){
+      var g=await db.rpc("get_review",{p_result_id:x.id});
+      if(g.error||!g.data){alert("উত্তরপত্র দেখা যাচ্ছে না।");return}
+      showReview(g.data,$("revbody"));show("rev");window.scrollTo(0,0);
+    };
+    d.appendChild(rb);$("past").appendChild(d);
+  });
+}
+
+async function start(x){
+  var q=await db.from("questions").select("*").eq("exam_id",x.id).order("id");
+  if(q.error||!q.data.length){alert("এই পরীক্ষায় কোনো প্রশ্ন নেই।");return}
+  if(!confirm("পরীক্ষা শুরু করলে এটি একটি চেষ্টা হিসেবে গণ্য হবে। পেজ রিফ্রেশ করলেও চেষ্টাটি শেষ ধরা হবে। শুরু করবেন?"))return;
+  var st=await db.rpc("start_exam",{p_exam_id:x.id});
+  if(st.error){alert("শুরু করা যায়নি: "+st.error.message);return}
+  exam=x;qs=x.shuffle_questions===false?q.data:q.data.sort(function(){return Math.random()-.5});
+  qs.forEach(function(z){z.ord=z.options.map(function(_,i){return i});if(x.shuffle_options!==false)z.ord.sort(function(){return Math.random()-.5})});
+  ans={};cur=0;left=x.duration_minutes*60;
+  $("etitle").textContent=x.title;show("exam");render();
+  clearInterval(tick);
+  tick=setInterval(function(){left--;clock();if(left<=0)finish()},1000);clock();
+}
+function clock(){
+  var m=Math.floor(left/60),s=left%60;
+  $("timer").textContent=bn((m<10?"0":"")+m+":"+(s<10?"0":"")+s);
+  $("timer").className=left<=60?"low":"";
+}
+function render(){
+  var q=qs[cur];
+  $("qn").textContent="প্রশ্ন "+bn(cur+1)+" / "+bn(qs.length);
+  $("q").textContent=q.body+" ["+bn(q.marks||1)+" নম্বর]";
+  $("opts").innerHTML="";
+  q.ord.forEach(function(i){var o=q.options[i];
+    var l=document.createElement("label");
+    var locked=ans[q.id]!==undefined;
+    l.className="opt"+(ans[q.id]===i?" sel":"");
+    if(locked&&ans[q.id]!==i)l.style.opacity=".5";
+    l.textContent=o;
+    l.onclick=function(){if(ans[q.id]!==undefined)return;ans[q.id]=i;render()};
+    $("opts").appendChild(l);
+  });
+  var dh=$("qdots");dh.innerHTML="";
+  qs.forEach(function(z,i){var b=document.createElement("b");b.textContent=bn(i+1);b.className=(ans[z.id]!==undefined?"done ":"")+(i===cur?"cur":"");b.onclick=function(){cur=i;render()};dh.appendChild(b)});
+  $("prev").disabled=cur===0;
+  $("pfill").style.width=(Object.keys(ans).length/qs.length*100)+"%";$("next").disabled=cur===qs.length-1;
+}
+$("prev").onclick=function(){cur--;render()};
+$("next").onclick=function(){cur++;render()};
+$("submit").onclick=function(){
+  var un=qs.length-Object.keys(ans).length;
+  if(confirm(un?bn(un)+"টি প্রশ্নের উত্তর বাকি। তবুও জমা দেবেন?":"জমা দেবেন?"))finish();
+};
+async function finish(){
+  clearInterval(tick);
+  var r=await db.rpc("submit_exam",{p_exam_id:exam.id,p_name:uname(),p_answers:ans});
+  if(r.error||r.data<0){alert("জমা হয়নি: "+(r.error?r.error.message:"কোনো চলমান পরীক্ষা নেই"));return}
+  var tm=qs.reduce(function(a,z){return a+(z.marks||1)},0);
+  $("score").textContent=bn(r.data)+" / "+bn(tm);
+  var pc=tm?Math.round(r.data/tm*100):0;
+  $("rmsg").textContent=pc>=80?"অসাধারণ! 🎉":pc>=50?"ভালো করেছেন! 👍":"আরও অনুশীলন করুন, আপনি পারবেন! 💪";
+  $("ring").style.setProperty("--p",pc);$("ringtxt").textContent=bn(pc)+"%";
+  if(pc>=80)confetti();
+  show("res");
+}
+function el(tag,txt,cls){var e=document.createElement(tag);if(txt!=null)e.textContent=txt;if(cls)e.className=cls;return e}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function confetti(){var cs=["#6d5ae6","#ec4899","#f59e0b","#14b8a6","#3b82f6"];for(var i=0;i<45;i++){var s=document.createElement("i");s.className="cf";s.style.left=Math.random()*100+"vw";s.style.background=cs[i%5];s.style.animationDelay=Math.random()*.8+"s";document.body.appendChild(s);setTimeout(function(n){return function(){n.remove()}}(s),4000)}}
+
+function showReview(d,box){
+  box.innerHTML="";
+  box.appendChild(el("div","Exam Site by Arghya · উত্তরপত্র","prhead"));
+  var sg=el("div",null,"sig");sg.appendChild(el("span","স্টুডেন্টের স্বাক্ষর: ______________"));sg.appendChild(el("span","শিক্ষকের স্বাক্ষর: ______________"));box.appendChild(sg);
+  box.appendChild(el("h1",d.exam));
+  box.appendChild(el("p","নাম: "+d.student+" | তারিখ: "+new Date(d.at).toLocaleString("bn-BD")));
+  var it=d.items||[],c=0,w=0,s=0;
+  it.forEach(function(x){if(x.chosen==null)s++;else if(x.chosen===x.correct)c++;else w++});
+  box.appendChild(el("p","স্কোর: "+bn(d.score)+" / "+bn(d.total)+" | সঠিক: "+bn(c)+" | ভুল: "+bn(w)+" | স্কিপ: "+bn(s)));
+  if(!d.recorded){box.appendChild(el("p","এই চেষ্টায় কোনো উত্তর সংরক্ষিত নেই (আগের ফলাফল, অথবা কোনো উত্তর দেওয়া হয়নি)।"));return}
+  it.forEach(function(x,i){
+    var q=el("div",null,"rq");
+    q.appendChild(el("b",bn(i+1)+". "+x.body+" ["+bn(x.marks)+" নম্বর]"));
+    var k=x.chosen==null?"sk":(x.chosen===x.correct?"ok":"bad");
+    q.appendChild(el("div",k==="sk"?"উত্তর দেওয়া হয়নি (স্কিপ)":(k==="ok"?"সঠিক":"ভুল"),"st st-"+k));
+    x.options.forEach(function(o,j){
+      var t=o;
+      if(j===x.correct)t+="   ✓ সঠিক উত্তর";
+      if(j===x.chosen)t+=(j===x.correct?"   (নির্বাচিত)":"   ✗ নির্বাচিত (ভুল)");
+      q.appendChild(el("div",t,"ro"+(j===x.correct?" good":(j===x.chosen?" wrong":""))));
+    });
+    box.appendChild(q);
+  });
+}
+$("revpdf").onclick=function(){window.print()};
+$("revback").onclick=home;
+$("back").onclick=home;
+
+}
+function startAdmin(){
+
+var db=supabase.createClient("https://knjfubfnhwqruqehsqbq.supabase.co","sb_publishable_pX5j7jDmv7HIde8FlmLXzA_Obx8kmFu");
+var $=function(i){return document.getElementById(i)};
+var bn=function(n){return String(n).replace(/\d/g,function(d){return "০১২৩৪৫৬৭৮৯"[d]})};
+function show(id){["login","denied","panel","rev"].forEach(function(s){$(s).classList.toggle("hide",s!==id)})}
+function el(tag,txt,cls){var e=document.createElement(tag);if(txt!=null)e.textContent=txt;if(cls)e.className=cls;return e}
+
+$("lbtn").onclick=async function(){
+  $("lerr").textContent="";
+  var r=await db.auth.signInWithPassword({email:$("email").value.trim(),password:$("pass").value});
+  if(r.error)$("lerr").textContent="ত্রুটি: "+r.error.message;
+};
+$("lo1").onclick=$("lo2").onclick=function(){db.auth.signOut()};
+$("tostu").onclick=function(){location.hash=""};
+
+db.auth.onAuthStateChange(async function(_e,s){
+  if(!s){show("login");return}
+  if(!$("rev").classList.contains("hide"))return;
+  var a=await db.from("admins").select("user_id").maybeSingle();
+  if(!a.data){show("denied");return}
+  show("panel");loadSummary();if(!$("qs").children.length)addQ();
+});
+
+document.querySelectorAll(".tabs button").forEach(function(b){
+  b.onclick=function(){
+    document.querySelectorAll(".tabs button").forEach(function(x){x.className="ghost"});
+    b.className="";
+    ["new","list","res"].forEach(function(t){$("t-"+t).classList.toggle("hide",t!==b.dataset.t)});
+    loadSummary();
+    if(b.dataset.t==="list")loadExams();
+    if(b.dataset.t==="res"){loadResults();loadTries();loadHard()}
+  };
+});
+
+function addQ(pre){
+  var n=$("qs").children.length+1;
+  var d=el("div",null,"qb");
+  d.appendChild(el("b","প্রশ্ন "+bn(n)));
+  var q=el("input");q.placeholder="প্রশ্ন লিখুন";q.className="qbody";d.appendChild(q);
+  ["ক","খ","গ","ঘ"].forEach(function(l){var o=el("input");o.placeholder="অপশন "+l;o.className="aopt";d.appendChild(o)});
+  var s=el("select");s.className="corr";
+  ["ক","খ","গ","ঘ"].forEach(function(l,i){var o=el("option","সঠিক উত্তর: "+l);o.value=i;s.appendChild(o)});
+  d.appendChild(s);
+  var mk=el("input");mk.type="number";mk.min=1;mk.value=pre?pre.marks:1;mk.className="marks";
+  d.appendChild(el("span","এই প্রশ্নের নম্বর:"));d.appendChild(mk);
+  if(pre){q.value=pre.body;d.querySelectorAll(".aopt").forEach(function(o,i){o.value=pre.options[i]});s.value=pre.correct}
+  $("qs").appendChild(d);
+}
+var editId=null;
+$("addq").onclick=function(){addQ()};
+function exf(title,dur){
+  var a=parseInt($("att").value);if(isNaN(a)||a<0)a=1;
+  return {title:title,duration_minutes:dur,max_attempts:a,shuffle_questions:$("shq").checked,shuffle_options:$("sho").checked,review_open:$("rvo").checked};
+}
+function bd(s){return s.replace(/[০-৯]/g,function(d){return "০১২৩৪৫৬৭৮৯".indexOf(d)})}
+function li(s){var c=bd(s.trim()).charAt(0).toUpperCase();var i="কখগঘ".indexOf(c);if(i<0)i="ABCD".indexOf(c);if(i<0)i="1234".indexOf(c);return i}
+$("doPaste").onclick=function(){
+  var m=$("msg"),bad=[],ok=0,ex=$("qs").children;
+  for(var j=ex.length-1;j>=0;j--){
+    var b0=ex[j];
+    if(!b0.querySelector(".qbody").value.trim()&&[].every.call(b0.querySelectorAll(".aopt"),function(o){return !o.value.trim()}))b0.remove();
+  }
+  $("paste").value.split(/\n\s*\n/).forEach(function(bl,n){
+    var ls=bl.split("\n").map(function(x){return x.trim()}).filter(Boolean);
+    if(!ls.length)return;
+    var body=[],opts=[],ans=-1,marks=1;
+    ls.forEach(function(l){
+      var r;
+      if(r=l.match(/^(?:উত্তর|ans(?:wer)?)\s*[:：\-]\s*(.+)$/i))ans=li(r[1]);
+      else if(r=l.match(/^(?:নম্বর|marks?)\s*[:：\-]\s*(\S+)/i))marks=parseInt(bd(r[1]))||1;
+      else if(body.length&&(r=l.match(/^\(?\s*([কখগঘA-Da-d1-4১-৪])\s*[\)\.।:\-]\s*(.+)$/)))opts[li(r[1])]=r[2];
+      else if(!opts.length)body.push(l);
+    });
+    var q=body.join(" ").replace(/^\s*[\d০-৯]+\s*[\.\)।]\s*/,"").trim();
+    if(!q||ans<0||![0,1,2,3].every(function(i){return opts[i]})){bad.push(bn(n+1));return}
+    addQ({body:q,options:opts,correct:ans,marks:Math.max(1,marks)});ok++;
+  });
+  m.className=ok?"ok":"err";
+  m.textContent=ok?bn(ok)+"টি প্রশ্ন নিচে যোগ হয়েছে"+(bad.length?"। ছাঁচ ঠিক না থাকায় বাদ গেছে ব্লক নং: "+bad.join(", "):"")+"। দেখে নিয়ে সংরক্ষণ করুন।":"কোনো প্রশ্ন বোঝা যায়নি। ছাঁচ মিলিয়ে দেখুন (প্রশ্ন, চারটি অপশন, উত্তর)।";
+  if(ok)$("paste").value="";
+};
+
+$("save").onclick=async function(){
+  var m=$("msg");m.className="err";m.textContent="";
+  var title=$("title").value.trim(),dur=parseInt($("dur").value);
+  if(!title||!dur){m.textContent="নাম ও সময় দিন।";return}
+  var items=[];
+  var blocks=$("qs").children;
+  for(var i=0;i<blocks.length;i++){
+    var b=blocks[i],body=b.querySelector(".qbody").value.trim();
+    var opts=[].map.call(b.querySelectorAll(".aopt"),function(x){return x.value.trim()});
+    if(!body&&opts.every(function(o){return !o}))continue;
+    if(!body||opts.some(function(o){return !o})){m.textContent="প্রশ্ন "+bn(i+1)+": প্রশ্ন ও চারটি অপশনই লিখুন।";return}
+    items.push({body:body,options:opts,correct:parseInt(b.querySelector(".corr").value),marks:Math.max(1,parseInt(b.querySelector(".marks").value)||1)});
+  }
+  if(!items.length){m.textContent="অন্তত একটি প্রশ্ন দিন।";return}
+  var e;
+  if(editId){
+    e=await db.from("exams").update(exf(title,dur)).eq("id",editId).select().single();
+    if(!e.error){var dq=await db.from("questions").delete().eq("exam_id",editId);if(dq.error){m.textContent="ত্রুটি: "+dq.error.message;return}}
+  }else e=await db.from("exams").insert(exf(title,dur)).select().single();
+  if(e.error){m.textContent="ত্রুটি: "+e.error.message;return}
+  var q=await db.from("questions").insert(items.map(function(x){return {exam_id:e.data.id,body:x.body,options:x.options,marks:x.marks}})).select();
+  if(q.error){m.textContent="ত্রুটি: "+q.error.message;return}
+  var keys=q.data.map(function(row,i){return {question_id:row.id,correct:items[i].correct}});
+  var k=await db.from("answer_keys").insert(keys);
+  if(k.error){m.textContent="ত্রুটি: "+k.error.message;return}
+  m.className="ok";m.textContent="সংরক্ষণ হয়েছে ("+bn(items.length)+"টি প্রশ্ন)।";
+  editId=null;$("formtitle").textContent="নতুন পরীক্ষা যোগ করুন";
+  $("title").value="";$("dur").value=10;$("att").value=1;$("shq").checked=true;$("sho").checked=true;$("rvo").checked=true;$("qs").innerHTML="";addQ();
+};
+
+async function editExam(x){
+  var q=await db.from("questions").select("*").eq("exam_id",x.id).order("id");
+  if(q.error){alert("লোড করা যায়নি: "+q.error.message);return}
+  var k=await db.from("answer_keys").select("*").in("question_id",q.data.map(function(r){return r.id}));
+  if(k.error){alert("লোড করা যায়নি: "+k.error.message);return}
+  var key={};k.data.forEach(function(r){key[r.question_id]=r.correct});
+  editId=x.id;
+  $("title").value=x.title;$("dur").value=x.duration_minutes;
+  $("att").value=x.max_attempts==null?1:x.max_attempts;$("shq").checked=x.shuffle_questions!==false;$("sho").checked=x.shuffle_options!==false;$("rvo").checked=x.review_open!==false;$("qs").innerHTML="";
+  q.data.forEach(function(r){addQ({body:r.body,options:r.options,correct:key[r.id],marks:r.marks})});
+  $("formtitle").textContent="এডিট: "+x.title;$("msg").textContent="";
+  document.querySelector('.tabs button[data-t="new"]').click();
+}
+
+async function loadExams(){
+  var r=await db.from("exams").select("*").order("id",{ascending:false});
+  var box=$("exams");box.innerHTML="";
+  if(!r.data||!r.data.length){box.textContent="কোনো পরীক্ষা নেই।";return}
+  r.data.forEach(function(x){
+    var row=el("div",null,"row");
+    row.appendChild(el("span",x.title+" ("+bn(x.duration_minutes)+" মিনিট)"));
+    var ed=el("button","এডিট");ed.onclick=function(){editExam(x)};
+    var d=el("button","মুছুন","del");
+    d.onclick=async function(){
+      if(!confirm("\""+x.title+"\" মুছে ফেলবেন? এর প্রশ্ন ও ফলাফলও মুছে যাবে।"))return;
+      await db.from("results").delete().eq("exam_id",x.id);
+      var e=await db.from("exams").delete().eq("id",x.id);
+      if(e.error)alert(e.error.message);else loadExams();
+    };
+    var bs=el("span");bs.appendChild(ed);bs.appendChild(d);row.appendChild(bs);box.appendChild(row);
+  });
+}
+
+function showReview(d,box){
+  box.innerHTML="";
+  box.appendChild(el("div","Exam Site by Arghya · উত্তরপত্র","prhead"));
+  var sg=el("div",null,"sig");sg.appendChild(el("span","স্টুডেন্টের স্বাক্ষর: ______________"));sg.appendChild(el("span","শিক্ষকের স্বাক্ষর: ______________"));box.appendChild(sg);
+  box.appendChild(el("h1",d.exam));
+  box.appendChild(el("p","নাম: "+d.student+" | তারিখ: "+new Date(d.at).toLocaleString("bn-BD")));
+  var it=d.items||[],c=0,w=0,s=0;
+  it.forEach(function(x){if(x.chosen==null)s++;else if(x.chosen===x.correct)c++;else w++});
+  box.appendChild(el("p","স্কোর: "+bn(d.score)+" / "+bn(d.total)+" | সঠিক: "+bn(c)+" | ভুল: "+bn(w)+" | স্কিপ: "+bn(s)));
+  if(!d.recorded){box.appendChild(el("p","এই চেষ্টায় কোনো উত্তর সংরক্ষিত নেই (আগের ফলাফল, অথবা কোনো উত্তর দেওয়া হয়নি)।"));return}
+  it.forEach(function(x,i){
+    var q=el("div",null,"rq");
+    q.appendChild(el("b",bn(i+1)+". "+x.body+" ["+bn(x.marks)+" নম্বর]"));
+    var k=x.chosen==null?"sk":(x.chosen===x.correct?"ok":"bad");
+    q.appendChild(el("div",k==="sk"?"উত্তর দেওয়া হয়নি (স্কিপ)":(k==="ok"?"সঠিক":"ভুল"),"st st-"+k));
+    x.options.forEach(function(o,j){
+      var t=o;
+      if(j===x.correct)t+="   ✓ সঠিক উত্তর";
+      if(j===x.chosen)t+=(j===x.correct?"   (নির্বাচিত)":"   ✗ নির্বাচিত (ভুল)");
+      q.appendChild(el("div",t,"ro"+(j===x.correct?" good":(j===x.chosen?" wrong":""))));
+    });
+    box.appendChild(q);
+  });
+}
+$("revpdf").onclick=function(){window.print()};
+$("revback").onclick=function(){show("panel")};
+
+async function loadSummary(){
+  var r=await db.from("results").select("user_id,score,total");
+  var e=await db.from("exams").select("id",{count:"exact",head:true});
+  var d=r.data||[],u={},sm=0,n=0;
+  d.forEach(function(x){u[x.user_id]=1;if(x.total>0){sm+=x.score/x.total*100;n++}});
+  var cells=[["s1",Object.keys(u).length,"👥 স্টুডেন্ট"],["s2",e.count||0,"📚 পরীক্ষা"],["s3",d.length,"✅ মোট জমা"],["s4",n?Math.round(sm/n)+"%":"-","⭐ গড় স্কোর"]];
+  var box=$("sum");box.innerHTML="";
+  cells.forEach(function(c){var k=el("div",null,"sc "+c[0]);k.appendChild(el("b",bn(c[1])));k.appendChild(el("span",c[2]));box.appendChild(k)});
+}
+async function loadHard(){
+  var rs=await db.from("results").select("exam_id,answers");
+  var qq=await db.from("questions").select("id,exam_id,body");
+  var ks=await db.from("answer_keys").select("*");
+  var box=$("hard");box.innerHTML="";
+  if(rs.error||qq.error||ks.error){box.textContent="লোড করা যায়নি।";return}
+  var key={};ks.data.forEach(function(k){key[k.question_id]=k.correct});
+  var st={};
+  rs.data.forEach(function(r){
+    if(!r.answers||!Object.keys(r.answers).length)return;
+    qq.data.forEach(function(q){
+      if(q.exam_id!==r.exam_id)return;
+      var s=st[q.id]||(st[q.id]={q:q,n:0,bad:0});
+      s.n++;if(r.answers[q.id]!==key[q.id])s.bad++;
+    });
+  });
+  var list=Object.keys(st).map(function(k){return st[k]}).filter(function(s){return s.bad>0})
+    .sort(function(a,b){return b.bad/b.n-a.bad/a.n||b.n-a.n}).slice(0,5);
+  if(!list.length){box.textContent="এখনও যথেষ্ট তথ্য নেই (শুধু নতুন জমা পড়া উত্তর গণনা হয়)।";return}
+  list.forEach(function(s){
+    var row=el("div",null,"hrow");
+    row.appendChild(el("span",bn(Math.round(s.bad/s.n*100))+"%","hp"));
+    row.appendChild(el("span",s.q.body+" ("+bn(s.bad)+"/"+bn(s.n)+" জন ভুল বা স্কিপ)"));
+    box.appendChild(row);
+  });
+}
+var rt;
+$("rq").oninput=function(){clearTimeout(rt);rt=setTimeout(loadResults,300)};
+$("rex").onchange=loadResults;
+async function loadTries(){
+  var r=await db.rpc("admin_attempts");
+  var box=$("tries");box.innerHTML="";
+  if(r.error){box.textContent="ত্রুটি: "+r.error.message;return}
+  if(!r.data.length){box.textContent="কেউ এখনও পরীক্ষা শুরু করেনি।";return}
+  var t=el("table"),h=el("tr");
+  ["ইমেইল","পরীক্ষা","অবস্থা",""].forEach(function(x){h.appendChild(el("th",x))});
+  t.appendChild(h);
+  r.data.forEach(function(x){
+    var tr=el("tr");
+    [x.email,x.exam_title,x.submitted?"জমা দিয়েছে":"শুরু করেছে, জমা হয়নি"].forEach(function(c){tr.appendChild(el("td",c))});
+    var td=el("td"),b=el("button","আবার সুযোগ দিন","ghost");
+    b.onclick=async function(){
+      if(!confirm(x.email+" কে \""+x.exam_title+"\" আবার দেওয়ার সুযোগ দেবেন? আগের ফলাফল মুছে যাবে।"))return;
+      var q=await db.rpc("admin_reset",{p_user:x.user_id,p_exam:x.exam_id});
+      if(q.error)alert(q.error.message);else{loadResults();loadTries()}
+    };
+    td.appendChild(b);tr.appendChild(td);t.appendChild(tr);
+  });
+  box.appendChild(t);
+}
+
+async function loadResults(){
+  var r=await db.from("results").select("*, exams(title)").order("created_at",{ascending:false});
+  var all=r.data||[],sel=$("rex"),keep=sel.value,seen={};
+  sel.innerHTML="";var o0=el("option","সব পরীক্ষা");o0.value="";sel.appendChild(o0);
+  all.forEach(function(x){if(x.exams&&!seen[x.exam_id]){seen[x.exam_id]=1;var o=el("option",x.exams.title);o.value=x.exam_id;sel.appendChild(o)}});
+  sel.value=keep;
+  var nq=$("rq").value.trim().toLowerCase(),ex=sel.value;
+  r.data=all.filter(function(x){return (!nq||(x.student_name||"").toLowerCase().indexOf(nq)>=0)&&(!ex||String(x.exam_id)===ex)});
+  var box=$("results");box.innerHTML="";
+  if(!r.data||!r.data.length){box.textContent="এখনও কেউ পরীক্ষা দেয়নি।";return}
+  var t=el("table"),h=el("tr");
+  ["নাম","পরীক্ষা","স্কোর","তারিখ",""].forEach(function(x){h.appendChild(el("th",x))});
+  t.appendChild(h);
+  r.data.forEach(function(x){
+    var tr=el("tr");
+    [x.student_name,x.exams?x.exams.title:"-",bn(x.score)+" / "+bn(x.total),new Date(x.created_at).toLocaleString("bn-BD")]
+      .forEach(function(c){tr.appendChild(el("td",c))});
+    var td=el("td"),dl=el("button","মুছুন","del");
+    dl.onclick=async function(){
+      if(!confirm("এই ফলাফল মুছবেন? (স্টুডেন্ট আবার পরীক্ষা দিতে পারবে না, সুযোগ দিতে নিচের তালিকা ব্যবহার করুন)"))return;
+      var q=await db.from("results").delete().eq("id",x.id);
+      if(q.error)alert(q.error.message);else loadResults();
+    };
+    var rv=el("button","উত্তরপত্র","ghost");
+    rv.onclick=async function(){
+      var g=await db.rpc("get_review",{p_result_id:x.id});
+      if(g.error||!g.data){alert("উত্তরপত্র লোড হয়নি");return}
+      showReview(g.data,$("revbody"));show("rev");window.scrollTo(0,0);
+    };
+    td.appendChild(rv);td.appendChild(dl);tr.appendChild(td);t.appendChild(tr);
+  });
+  box.appendChild(t);
+}
+
+}
+(function(){
+  var adm=location.hash==="#admin";
+  if(adm)document.body.classList.add("admin");
+  document.title=adm?"অ্যাডমিন | Exam Site by Arghya":"Exam Site by Arghya";
+  document.getElementById("root").appendChild(document.getElementById(adm?"tpl-admin":"tpl-student").content.cloneNode(true));
+  window.addEventListener("hashchange",function(){if((location.hash==="#admin")!==adm)location.reload()});
+  if(adm)startAdmin();else startStudent();
+})();
+</script>
+</body>
+</html>
