@@ -163,6 +163,8 @@ input:focus,select:focus{outline:2px solid var(--a1);border-color:transparent}
 .lbrow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bank-item{display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}
 .bank-item input{width:auto;margin:6px 0 0}
+.ovl{position:fixed;inset:0;background:rgba(15,10,40,.62);z-index:90;display:grid;place-items:center;padding:14px}
+.ovl>.card{width:100%;max-width:560px;max-height:92vh;overflow:auto;margin:0}
 </style>
 </head>
 <body>
@@ -198,6 +200,8 @@ input:focus,select:focus{outline:2px solid var(--a1);border-color:transparent}
     <button class="ghost" id="logout">লগআউট</button>
     <button class="ghost hide" id="adminbtn">🛠 অ্যাডমিন প্যানেল</button>
   </div>
+  <div class="card"><div style="display:flex;gap:14px;align-items:center"><button class="ghost" id="avbtn" aria-label="অ্যাভাটার বদলান" style="font-size:2.2rem;padding:6px 14px;margin:0">🙂</button><div style="flex:1"><b id="lvl"></b><div class="pbar"><i id="xpfill"></i></div><small id="xptxt"></small></div></div><div class="chips" id="avgrid" style="display:none;margin-top:10px"></div></div>
+  <div class="card"><h2>⚡ ডেইলি চ্যালেঞ্জ</h2><p id="dctext"></p><button id="dcbtn">⚡ শুরু করুন</button></div>
   <div class="card"><h2>🏅 ব্যাজ ও স্ট্রিক</h2><div class="chips" id="streak"></div><div class="chips" id="badges"></div></div>
   <div class="card"><h2>🥇 লিডারবোর্ড</h2><select id="lbsel"></select><div id="lb"></div></div>
   <div class="card"><h2>📚 পরীক্ষাসমূহ</h2><div id="exams"></div></div>
@@ -226,6 +230,7 @@ input:focus,select:focus{outline:2px solid var(--a1);border-color:transparent}
   <div class="ring" id="ring"><b id="ringtxt"></b></div>
   <div class="score" id="score"></div>
   <p id="rmsg"></p>
+  <button class="ghost" id="shareCard">📤 ফলাফল কার্ড শেয়ার করুন</button>
   <button id="back">হোমে ফিরুন</button>
 </section>
 
@@ -372,10 +377,97 @@ $("rbtn").onclick=async function(){
   recovering=false;home();
 };
 
+var lastRes=null,lvTxt="",AV=["🦊","🐼","🦁","🐯","🐸","🦄","🐧","🐨","🦉","🐙","🚀","⭐","🎯","🔥","📚","🧠"];
+function av(){return (user.user_metadata&&user.user_metadata.avatar)||"🙂"}
+function setAvatar(e){$("avbtn").textContent=e;$("avgrid").style.display="none";db.auth.updateUser({data:{avatar:e}}).then(function(r){if(r.data&&r.data.user)user=r.data.user})}
+function renderProfile(rs,dr){
+  var xp=0;rs.forEach(function(z){xp+=(z.score||0)*10+20});dr.forEach(function(z){xp+=z.xp||0});
+  var l=Math.floor(Math.sqrt(xp/50))+1,lo=50*(l-1)*(l-1),hi=50*l*l,T=["নবিশ","শিক্ষার্থী","অনুসন্ধানী","মেধাবী","জ্ঞানী","বিশারদ","গুরু","মহাগুরু"],nm="লেভেল "+bn(l)+" · "+T[Math.min(l-1,7)];
+  lvTxt=nm+" · ⚡ "+bn(xp)+" XP";
+  try{var k="lv_"+user.id,old=+localStorage.getItem(k)||0;if(old&&l>old){nm="🎉 লেভেল আপ! "+nm;confetti()}localStorage.setItem(k,l)}catch(_){}
+  $("lvl").textContent=nm;
+  $("xptxt").textContent="⚡ "+bn(xp)+" XP · পরের লেভেলে আর "+bn(hi-xp)+" XP";
+  $("xpfill").style.width=Math.round((xp-lo)/(hi-lo)*100)+"%";
+  $("avbtn").textContent=av();
+  var g=$("avgrid");
+  if(!g.children.length)AV.forEach(function(e){var b=el("button",e,"ghost");b.style.cssText="font-size:1.6rem;padding:4px 10px;margin:0";b.onclick=function(){setAvatar(e)};g.appendChild(b)});
+  $("avbtn").onclick=function(){g.style.display=g.style.display==="none"?"flex":"none"};
+}
+function dcCard(dr){
+  var t=dr.length&&ymd(new Date(dr[0].created_at))===ymd(new Date());
+  $("dctext").textContent=t?"আজকের চ্যালেঞ্জ শেষ ✅ স্কোর "+bn(dr[0].score)+"/"+bn(dr[0].total)+"। কাল আবার আসুন!":"প্রতিদিন ৫টি প্রশ্ন (আপনার দেওয়া পরীক্ষাগুলো থেকে)। শেষ করলে XP ও স্ট্রিক!";
+  $("dcbtn").textContent=t?"ফলাফল দেখুন":"⚡ শুরু করুন";$("dcbtn").onclick=dcOpen;
+}
+function dcClose(){var o=$("dcov");if(o)o.remove();home()}
+function dcBtn(){var b=el("button","বন্ধ করুন","ghost");b.onclick=dcClose;return b}
+function dcResult(c,d,qs,a){
+  c.innerHTML="";c.appendChild(el("h2","⚡ আজকের ফলাফল"));
+  c.appendChild(el("div",bn(d.score)+" / "+bn(d.total),"score"));
+  c.appendChild(el("p",(d.xp?"+"+bn(d.xp)+" XP · ":"")+(d.score>=d.total*.8?"অসাধারণ! 🎉":"চালিয়ে যান! 💪")));
+  if(d.score>=d.total*.8)confetti();
+  if(qs&&d.keys)qs.forEach(function(q,i){
+    var ok=a[q.id]===d.keys[q.id],r=el("div",null,"rq");
+    r.appendChild(el("div",bn(i+1)+". "+q.body+" "+(ok?"✅":"❌")));
+    r.appendChild(el("div","সঠিক: "+q.options[d.keys[q.id]],"ro good"));
+    if(!ok&&a[q.id]!==undefined)r.appendChild(el("div","আপনার: "+q.options[a[q.id]],"ro wrong"));
+    c.appendChild(r);
+  });
+  c.appendChild(dcBtn());
+}
+function dcOpen(){
+  var o=el("div",null,"ovl"),c=el("div","লোড হচ্ছে...","card");o.id="dcov";o.appendChild(c);document.body.appendChild(o);
+  db.rpc("daily_challenge").then(function(r){
+    c.innerHTML="";var d=r.data;
+    if(r.error||!d){c.appendChild(el("p","ডেইলি চ্যালেঞ্জ এখনো চালু হয়নি।"));c.appendChild(dcBtn());return}
+    if(d.done){dcResult(c,d);return}
+    var qs=d.questions||[],i=0,a={};
+    if(!qs.length){c.appendChild(el("p","আগে অন্তত একটি পরীক্ষা দিন, তারপর আপনার চ্যালেঞ্জ তৈরি হবে।"));c.appendChild(dcBtn());return}
+    function step(){
+      c.innerHTML="";var q=qs[i],lock=false;
+      c.appendChild(el("h2","প্রশ্ন "+bn(i+1)+" / "+bn(qs.length)));c.appendChild(el("p",q.body));
+      q.options.forEach(function(t,k){var b=el("div",t,"opt");b.onclick=function(){
+        if(lock)return;lock=true;a[q.id]=k;b.classList.add("sel");
+        setTimeout(async function(){
+          if(++i<qs.length){step();return}
+          c.textContent="জমা হচ্ছে...";
+          var s2=await db.rpc("daily_submit",{p_answers:a});
+          if(s2.error||!s2.data){c.innerHTML="";c.appendChild(el("p","জমা হয়নি: "+(s2.error?s2.error.message:"আবার চেষ্টা করুন")));c.appendChild(dcBtn());return}
+          dcResult(c,s2.data,qs,a);
+        },350)};c.appendChild(b)});
+      c.appendChild(dcBtn());
+    }
+    step();
+  });
+}
+async function shareCard(){
+  if(!lastRes)return;
+  try{await document.fonts.load('700 60px "Hind Siliguri"')}catch(_){}
+  var W=1080,H=1350,c=document.createElement("canvas");c.width=W;c.height=H;var x=c.getContext("2d"),F='"Hind Siliguri",sans-serif';
+  var g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,"#6d5ae6");g.addColorStop(.6,"#ec4899");g.addColorStop(1,"#f59e0b");x.fillStyle=g;x.fillRect(0,0,W,H);
+  x.fillStyle="rgba(255,255,255,.14)";for(var i=0;i<6;i++){x.beginPath();x.arc(120+i*190,i%2?200:1180,90+i*8,0,7);x.fill()}
+  x.fillStyle="#fff";x.textAlign="center";
+  x.font="700 54px "+F;x.fillText("Exam Site by Arghya",W/2,120);
+  x.font="130px sans-serif";x.fillText(av(),W/2,310);
+  x.font="700 64px "+F;x.fillText(uname(),W/2,420);
+  x.font="500 46px "+F;x.fillText(lastRes.t,W/2,490);
+  x.lineWidth=46;x.lineCap="round";x.strokeStyle="rgba(255,255,255,.28)";x.beginPath();x.arc(W/2,790,210,0,Math.PI*2);x.stroke();
+  x.strokeStyle="#fff";x.beginPath();x.arc(W/2,790,210,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.max(lastRes.p,1)/100);x.stroke();
+  x.font="700 120px "+F;x.fillText(bn(lastRes.p)+"%",W/2,830);
+  x.font="600 64px "+F;x.fillText(bn(lastRes.s)+" / "+bn(lastRes.m),W/2,1100);
+  x.font="500 42px "+F;x.fillText(lvTxt,W/2,1190);
+  x.font="400 34px "+F;x.fillText(location.host,W/2,1280);
+  c.toBlob(async function(b){
+    var f=new File([b],"result.png",{type:"image/png"});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:"আমার ফলাফল"});return}catch(e){if(e&&e.name==="AbortError")return}}
+    var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="result.png";a.click();
+  },"image/png");
+}
+$("shareCard").onclick=shareCard;
 function ymd(d){return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()}
-function renderBadges(rs){
+function renderBadges(rs,extra){
   var days={},n=rs.length,best=0,sm=0,nn=0,perfect=false,good=false;
   rs.forEach(function(z){days[ymd(new Date(z.created_at))]=1;if(z.total>0){var p=z.score/z.total*100;sm+=p;nn++;if(p>=100)perfect=true;if(p>=80)good=true}});
+  (extra||[]).forEach(function(t){days[ymd(new Date(t))]=1});
   var avg=nn?sm/nn:0,d=new Date(),cur=0,today=!!days[ymd(d)];
   if(!today)d.setDate(d.getDate()-1);
   while(days[ymd(d)]){cur++;d.setDate(d.getDate()-1)}
@@ -399,7 +491,7 @@ async function loadLb(){
   r.data.forEach(function(x){
     var d=el("div",null,"lbrow"+(x.is_me?" me":""));
     d.appendChild(el("span",x.rank==1?"🥇":x.rank==2?"🥈":x.rank==3?"🥉":bn(x.rank),"rk"));
-    d.appendChild(el("span",x.name+(x.is_me?" (আপনি)":""),"nm"));
+    d.appendChild(el("span",(x.avatar?x.avatar+" ":"")+x.name+(x.is_me?" (আপনি)":""),"nm"));
     d.appendChild(el("b",bn(x.score)+" / "+bn(x.total),"hp"));
     box.appendChild(d);
   });
@@ -435,7 +527,8 @@ async function home(){
   var rs=r.data||[],sm=0,nn=0;
   rs.forEach(function(z){if(z.total>0){sm+=z.score/z.total*100;nn++}});
   $("stats").innerHTML="<span class='chip'>📝 "+bn(rs.length)+"টি পরীক্ষা দিয়েছেন</span>"+(nn?"<span class='chip'>⭐ গড় "+bn(Math.round(sm/nn))+"%</span>":"");
-  try{renderBadges(rs)}catch(_){}try{lbSetup(e.data||[])}catch(_){}
+  var dq=await db.from("daily_runs").select("*").order("created_at",{ascending:false}),dr=dq.error?[]:(dq.data||[]);
+  try{renderBadges(rs,dr.map(function(z){return z.created_at}))}catch(_){}try{renderProfile(rs,dr)}catch(_){}try{dcCard(dr)}catch(_){}try{lbSetup(e.data||[])}catch(_){}
   (r.data||[]).forEach(function(x){
     var d=document.createElement("div");d.className="row";
     d.innerHTML="<span>"+(x.exams?x.exams.title+" · ":"")+new Date(x.created_at).toLocaleDateString("bn-BD")+"</span><b>"+bn(x.score)+" / "+bn(x.total)+"</b>";
@@ -502,6 +595,7 @@ async function finish(){
   $("rmsg").textContent=pc>=80?"অসাধারণ! 🎉":pc>=50?"ভালো করেছেন! 👍":"আরও অনুশীলন করুন, আপনি পারবেন! 💪";
   $("ring").style.setProperty("--p",pc);$("ringtxt").textContent=bn(pc)+"%";
   if(pc>=80)confetti();
+  lastRes={t:exam.title,s:r.data,m:tm,p:pc};
   show("res");
 }
 function el(tag,txt,cls){var e=document.createElement(tag);if(txt!=null)e.textContent=txt;if(cls)e.className=cls;return e}
