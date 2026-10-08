@@ -1,11 +1,11 @@
-// api/ai.js — Vercel Serverless Function (Node)
-// Env: SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY
+// api/ai.js — Vercel Serverless Function (Node) — Google Gemini সংস্করণ (ফ্রি টিয়ারে চলে)
+// Env: SUPABASE_URL, SUPABASE_SERVICE_KEY, GEMINI_API_KEY
 // ঐচ্ছিক: AI_MODEL_FAST, AI_MODEL_SMART
 const SB = process.env.SUPABASE_URL;
 const SK = process.env.SUPABASE_SERVICE_KEY;
-const AK = process.env.ANTHROPIC_API_KEY;
-const FAST = process.env.AI_MODEL_FAST || 'claude-haiku-5-5';
-const SMART = process.env.AI_MODEL_SMART || 'claude-sonnet-5-5';
+const GK = process.env.GEMINI_API_KEY;
+const FAST = process.env.AI_MODEL_FAST || 'gemini-2.5-flash-lite';
+const SMART = process.env.AI_MODEL_SMART || 'gemini-2.5-flash';
 
 async function sb(path, opt = {}) {
   const r = await fetch(SB + path, {
@@ -33,15 +33,44 @@ async function isAdmin(id) {
   return Array.isArray(r) && r.length > 0;
 }
 
-async function claude({ model, system, messages, max_tokens = 1200 }) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+// ---- Gemini কল (আগের claude() এর জায়গায়; ইন্টারফেস একই রাখা হয়েছে) ----
+// messages: [{role:'user'|'assistant', content: string | [{type:'text',text}|{type:'image',source:{media_type,data}}]}]
+function toParts(content) {
+  if (typeof content === 'string') return [{ text: content }];
+  return (content || []).map((c) =>
+    c.type === 'image'
+      ? { inlineData: { mimeType: c.source.media_type || 'image/jpeg', data: c.source.data } }
+      : { text: String(c.text || '') }
+  );
+}
+async function claude({ model, system, messages, max_tokens = 1200, json = false }) {
+  const body = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: toParts(m.content) })),
+    generationConfig: {
+      maxOutputTokens: max_tokens,
+      temperature: json ? 0.7 : 0.5,
+      thinkingConfig: { thinkingBudget: 0 },
+      ...(json ? { responseMimeType: 'application/json' } : {}),
+    },
+  };
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
     method: 'POST',
-    headers: { 'x-api-key': AK, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens, system, messages }),
+    headers: { 'x-goog-api-key': GK, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
   });
-  const j = await r.json();
-  if (!r.ok) throw new Error((j.error && j.error.message) || 'AI ত্রুটি ' + r.status);
-  return (j.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    if (r.status === 429) throw new Error('এখন AI-তে অনেক চাপ (ফ্রি সীমা)। এক মিনিট পরে আবার চেষ্টা করুন।');
+    throw new Error((j.error && j.error.message) || 'AI ত্রুটি ' + r.status);
+  }
+  const c = j.candidates && j.candidates[0];
+  const text = ((c && c.content && c.content.parts) || []).map((p) => p.text || '').join('');
+  if (!text) {
+    const why = (j.promptFeedback && j.promptFeedback.blockReason) || (c && c.finishReason) || '';
+    throw new Error('AI উত্তর দেয়নি' + (why ? ' (' + why + ')' : '') + ', আবার চেষ্টা করুন');
+  }
+  return text;
 }
 
 const CLS = { 6: 'ষষ্ঠ', 7: 'সপ্তম', 8: 'অষ্টম', 9: 'নবম', 10: 'দশম', 11: 'একাদশ', 12: 'দ্বাদশ', 13: 'এডমিশন' };
@@ -90,12 +119,12 @@ module.exports = async (req, res) => {
       return res.json({
         ok: true,
         env: Object.fromEntries(
-          ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'ANTHROPIC_API_KEY', 'WA_TOKEN', 'WA_PHONE_ID', 'CRON_SECRET', 'SITE_URL'].map((k) => [k, has(k)])
+          ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'GEMINI_API_KEY', 'WA_TOKEN', 'WA_PHONE_ID', 'CRON_SECRET', 'SITE_URL'].map((k) => [k, has(k)])
         ),
       });
     }
 
-    if (!AK) return res.status(500).json({ error: 'সার্ভারে ANTHROPIC_API_KEY সেট করা নেই' });
+    if (!GK) return res.status(500).json({ error: 'সার্ভারে GEMINI_API_KEY সেট করা নেই' });
 
     if (act === 'genq') {
       if (!(await isAdmin(u.id))) return res.status(403).json({ error: 'শুধু অ্যাডমিন' });
@@ -108,7 +137,7 @@ module.exports = async (req, res) => {
 প্রশ্নসংখ্যা: ${n}
 ${b.notes ? 'এই নোট/টেক্সটের ভিত্তিতে বানাও:\n' + String(b.notes).slice(0, 6000) : ''}
 avoid: ${JSON.stringify(avoid)}`;
-      const out = await claude({ model: SMART, system: GENQ_SYS, messages: [{ role: 'user', content: prompt }], max_tokens: 4500 });
+      const out = await claude({ model: SMART, system: GENQ_SYS, messages: [{ role: 'user', content: prompt }], max_tokens: 6000, json: true });
       const arr = parseJSON(out)
         .filter((x) => x && typeof x.q === 'string' && Array.isArray(x.o) && x.o.length === 4 && x.o.every((o) => typeof o === 'string' && o.trim()) && Number.isInteger(x.a) && x.a >= 0 && x.a <= 3)
         .map((x) => ({ q: x.q.replace(/\s+/g, ' ').trim(), o: x.o.map((o) => o.replace(/\s+/g, ' ').trim()), a: x.a, m: Math.max(1, parseInt(x.m) || 1) }));
@@ -147,7 +176,7 @@ avoid: ${JSON.stringify(avoid)}`;
         const content = [];
         if (img) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: img } });
         content.push({ type: 'text', text: (b.subject ? 'বিষয়: ' + String(b.subject).slice(0, 60) + '\n' : '') + (q || 'ছবির প্রশ্নটি সমাধান করো।') });
-        const ans = await claude({ model: SMART, system: DOUBT_SYS, messages: [{ role: 'user', content }], max_tokens: 1800 });
+        const ans = await claude({ model: SMART, system: DOUBT_SYS, messages: [{ role: 'user', content }], max_tokens: 2500 });
         await sb('/rest/v1/doubts', {
           method: 'POST',
           body: JSON.stringify({ user_id: u.id, subject: b.subject || null, question: q || '(ছবি)', answer: ans, had_image: !!img }),
