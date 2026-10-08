@@ -1,0 +1,9 @@
+# Vercel → Project → Settings → Environment Variables (সব "Production"-এ দিন, তারপর Redeploy)
+SUPABASE_URL=https://knjfubfnhwqruqehsqbq.supabase.co
+SUPABASE_SERVICE_KEY=   # Supabase → Project Settings → API → service_role / secret key (কখনও index.html-এ বসাবেন না)
+ANTHROPIC_API_KEY=      # console.anthropic.com থেকে
+WA_TOKEN=               # Meta → System User → স্থায়ী (permanent) অ্যাক্সেস টোকেন
+WA_PHONE_ID=            # Meta → WhatsApp → API Setup → Phone number ID
+CRON_SECRET=            # যেকোনো লম্বা র‍্যান্ডম লেখা (Vercel Cron নিজেই এটা পাঠায়)
+SITE_URL=https://আপনার-সাইট.vercel.app
+# ঐচ্ছিক: WA_TPL_RESULT, WA_TPL_DAILY, WA_TPL_WEEKLY, WA_LANG, WA_GRAPH_VERSION, AI_MODEL_FAST, AI_MODEL_SMART
