@@ -54,11 +54,19 @@ async function claude({ model, system, messages, max_tokens = 1200, json = false
       ...(json ? { responseMimeType: 'application/json' } : {}),
     },
   };
-  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+  const call = (bd) => fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
     method: 'POST',
     headers: { 'x-goog-api-key': GK, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(bd),
   });
+  let r = await call(body);
+  if (r.status === 400) {
+    // কিছু নতুন মডেল thinkingConfig/thinkingBudget নেয় না — ওটা ছাড়া আবার চেষ্টা
+    const b2 = JSON.parse(JSON.stringify(body));
+    delete b2.generationConfig.thinkingConfig;
+    b2.generationConfig.maxOutputTokens = Math.max(max_tokens * 2, 2000);
+    r = await call(b2);
+  }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
     if (r.status === 429) throw new Error('এখন AI-তে অনেক চাপ (ফ্রি সীমা)। এক মিনিট পরে আবার চেষ্টা করুন।');
