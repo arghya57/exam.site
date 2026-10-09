@@ -1,13 +1,21 @@
-// api/ai.js — Vercel Serverless Function (Node) — Google Gemini সংস্করণ (ফ্রি টিয়ারে চলে)
-// অ্যাকশন: genq (অ্যাডমিন) · tutor (AI মশাই) · doubt · explain (ভুল উত্তরের ব্যাখ্যা) · aiq_get/aiq_submit (AI ডেইলি কুইজ)
-// Env: SUPABASE_URL, SUPABASE_SERVICE_KEY, GEMINI_API_KEY
-// ঐচ্ছিক: AI_MODEL_FAST, AI_MODEL_SMART, AI_MODEL_FALLBACK (কমা দিয়ে আলাদা; মূল মডেল ব্যস্ত থাকলে এগুলো চেষ্টা হবে)
+// api/wa.js — WhatsApp Cloud API: ফলাফল PDF, সকালের প্রশ্ন + স্ট্রিক, সাপ্তাহিক অভিভাবক রিপোর্ট
+// Env: SUPABASE_URL, SUPABASE_SERVICE_KEY, GEMINI_API_KEY, WA_TOKEN, WA_PHONE_ID, CRON_SECRET, SITE_URL
+// ঐচ্ছিক: WA_TPL_RESULT, WA_TPL_DAILY, WA_TPL_WEEKLY, WA_LANG, WA_GRAPH_VERSION, AI_MODEL_SMART, AI_MODEL_FALLBACK
 const SB = process.env.SUPABASE_URL;
 const SK = process.env.SUPABASE_SERVICE_KEY;
 const GK = process.env.GEMINI_API_KEY;
-const FAST = process.env.AI_MODEL_FAST || 'gemini-3.5-flash-lite';
+const WT = process.env.WA_TOKEN;
+const PID = process.env.WA_PHONE_ID;
+const GV = process.env.WA_GRAPH_VERSION || 'v23.0';
+const LANG = process.env.WA_LANG || 'bn';
+const SITE = process.env.SITE_URL || '';
 const SMART = process.env.AI_MODEL_SMART || 'gemini-3.8-flash';
 const FALLBACKS = (process.env.AI_MODEL_FALLBACK || 'gemini-3.5-flash-lite,gemini-3.5-flash,gemini-3.8-flash').split(',').map((x) => x.trim()).filter(Boolean);
+const TPL = {
+  result: process.env.WA_TPL_RESULT || 'exam_result_pdf',
+  daily: process.env.WA_TPL_DAILY || 'daily_question',
+  weekly: process.env.WA_TPL_WEEKLY || 'weekly_report',
+};
 
 async function sb(path, opt = {}) {
   const r = await fetch(SB + path, {
@@ -20,8 +28,6 @@ async function sb(path, opt = {}) {
   if (!r.ok) throw new Error((j && (j.message || j.error)) || 'DB ' + r.status);
   return j;
 }
-const rpc = (fn, args) => sb('/rest/v1/rpc/' + fn, { method: 'POST', body: JSON.stringify(args) });
-
 async function authUser(req) {
   const t = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   if (!t) return null;
@@ -35,267 +41,345 @@ async function isAdmin(id) {
   return Array.isArray(r) && r.length > 0;
 }
 
-// ---- Gemini কল (আগের claude() এর জায়গায়; ইন্টারফেস একই রাখা হয়েছে) ----
-// messages: [{role:'user'|'assistant', content: string | [{type:'text',text}|{type:'image',source:{media_type,data}}]}]
-function toParts(content) {
-  if (typeof content === 'string') return [{ text: content }];
-  return (content || []).map((c) =>
-    c.type === 'image'
-      ? { inlineData: { mimeType: c.source.media_type || 'image/jpeg', data: c.source.data } }
-      : { text: String(c.text || '') }
-  );
-}
-const noThink = new Set(); // যেসব মডেল thinkingConfig নেয় না
-async function gcall(model, body) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
-  const go = (bd) => fetch(url, { method: 'POST', headers: { 'x-goog-api-key': GK, 'content-type': 'application/json' }, body: JSON.stringify(bd) });
-  let bd = body;
-  if (noThink.has(model)) {
-    bd = JSON.parse(JSON.stringify(body));
-    delete bd.generationConfig.thinkingConfig;
-  }
-  let r = await go(bd);
-  if (r.status === 400 && bd.generationConfig.thinkingConfig) {
-    // কিছু নতুন মডেল thinkingConfig নেয় না — ওটা ছাড়া আবার চেষ্টা
-    noThink.add(model);
-    const b2 = JSON.parse(JSON.stringify(body));
-    delete b2.generationConfig.thinkingConfig;
-    b2.generationConfig.maxOutputTokens = Math.max((body.generationConfig.maxOutputTokens || 1000) * 2, 2000);
-    r = await go(b2);
-  }
-  const j = await r.json().catch(() => ({}));
-  return { ok: r.ok, status: r.status, j };
-}
-const retryable = (st, msg) => [404, 429, 500, 502, 503, 504].includes(st) || /no longer available|high demand|overloaded|unavailable|not found|try again later/i.test(msg || '');
+const bn = (n) => String(n).replace(/\d/g, (d) => '০১২৩৪৫৬৭৮৯'[d]);
+const flat = (s, max = 900) => String(s == null ? '' : s).replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim().slice(0, max);
+const dkey = (ms) => new Date(ms + 6 * 3600e3).toISOString().slice(0, 10); // ঢাকা সময়ের তারিখ
+const today = () => dkey(Date.now());
+const CLS = { 6: 'ষষ্ঠ', 7: 'সপ্তম', 8: 'অষ্টম', 9: 'নবম', 10: 'দশম', 11: 'একাদশ', 12: 'দ্বাদশ', 13: 'এডমিশন' };
+const SUBJ = ['সাধারণ জ্ঞান', 'গণিত', 'বিজ্ঞান', 'ইংরেজি', 'বাংলা', 'বাংলাদেশ ও বিশ্বপরিচয়', 'গণিত']; // রবি→শনি (UTC weekday 0=রবি)
 
-async function claude({ model, system, messages, max_tokens = 1200, json = false }) {
+async function pool(items, n, fn) {
+  const out = [];
+  let i = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(n, items.length) }, async () => {
+      while (i < items.length) {
+        const k = i++;
+        out[k] = await fn(items[k]).catch((e) => ({ error: String((e && e.message) || e) }));
+      }
+    })
+  );
+  return out;
+}
+
+async function wlog(user_id, kind, ok, info) {
+  await sb('/rest/v1/wa_log', { method: 'POST', body: JSON.stringify({ user_id, kind, ok, info: String(info || '').slice(0, 300) }) }).catch(() => {});
+}
+
+async function waPost(path, opt) {
+  const r = await fetch(`https://graph.facebook.com/${GV}/${PID}/${path}`, {
+    ...opt,
+    headers: { Authorization: 'Bearer ' + WT, ...(opt.headers || {}) },
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j.error && (j.error.error_user_msg || j.error.message)) || 'WhatsApp ত্রুটি ' + r.status);
+  return j;
+}
+async function sendTemplate(to, name, params, header, lang) {
+  const components = [];
+  if (header) components.push({ type: 'header', parameters: [header] });
+  if (params && params.length) components.push({ type: 'body', parameters: params.map((t) => ({ type: 'text', text: flat(t) || '-' })) });
+  return waPost('messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'template', template: { name, language: { code: lang || LANG }, components } }),
+  });
+}
+async function uploadPdf(b64) {
+  const fd = new FormData();
+  fd.append('messaging_product', 'whatsapp');
+  fd.append('type', 'application/pdf');
+  fd.append('file', new Blob([Buffer.from(b64, 'base64')], { type: 'application/pdf' }), 'answer-sheet.pdf');
+  const j = await waPost('media', { method: 'POST', body: fd });
+  return j.id;
+}
+
+// Gemini দিয়ে লেখা তৈরি (ফ্রি টিয়ারে চলে); মূল মডেল ব্যস্ত থাকলে পরেরটায় যায়
+const noThink = new Set();
+async function claudeText(system, user, max_tokens = 800) {
+  if (!GK) throw new Error('GEMINI_API_KEY সেট করা নেই');
   const body = {
     systemInstruction: { parts: [{ text: system }] },
-    contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: toParts(m.content) })),
-    generationConfig: {
-      maxOutputTokens: max_tokens,
-      temperature: json ? 0.7 : 0.5,
-      thinkingConfig: { thinkingBudget: 0 },
-      ...(json ? { responseMimeType: 'application/json' } : {}),
-    },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: { maxOutputTokens: max_tokens, temperature: 0.6, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
   };
-  // মূল মডেল ব্যস্ত/অনুপস্থিত হলে নিজে থেকে পরেরটায় যাবে
-  const models = [model, ...FALLBACKS].filter((m, i, a) => a.indexOf(m) === i);
-  let last = null;
+  const models = [SMART, ...FALLBACKS].filter((m, i, a) => a.indexOf(m) === i);
+  let lastErr = 'AI ত্রুটি';
   for (const m of models) {
-    const { ok, status, j } = await gcall(m, body);
-    if (ok) {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent';
+    const go = (bd) => fetch(url, { method: 'POST', headers: { 'x-goog-api-key': GK, 'content-type': 'application/json' }, body: JSON.stringify(bd) });
+    let bd = body;
+    if (noThink.has(m)) { bd = JSON.parse(JSON.stringify(body)); delete bd.generationConfig.thinkingConfig; }
+    let r = await go(bd);
+    if (r.status === 400 && bd.generationConfig.thinkingConfig) {
+      noThink.add(m);
+      const b2 = JSON.parse(JSON.stringify(body));
+      delete b2.generationConfig.thinkingConfig;
+      b2.generationConfig.maxOutputTokens = Math.max(max_tokens * 2, 2000);
+      r = await go(b2);
+    }
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
       const c = j.candidates && j.candidates[0];
-      const text = ((c && c.content && c.content.parts) || []).map((p) => p.text || '').join('');
-      if (text) return text;
-      const why = (j.promptFeedback && j.promptFeedback.blockReason) || (c && c.finishReason) || '';
-      last = { status: 200, msg: 'AI উত্তর দেয়নি' + (why ? ' (' + why + ')' : '') + ', আবার চেষ্টা করুন' };
-      if (why === 'SAFETY' || why === 'PROHIBITED_CONTENT') break;
+      const t = ((c && c.content && c.content.parts) || []).map((p) => p.text || '').join('');
+      if (t) return t;
+      lastErr = 'AI উত্তর দেয়নি';
       continue;
     }
-    const msg = (j.error && j.error.message) || 'AI ত্রুটি ' + status;
-    last = { status, msg };
-    if (!retryable(status, msg)) break;
+    lastErr = (j.error && j.error.message) || 'AI ত্রুটি ' + r.status;
+    if (![404, 429, 500, 502, 503, 504].includes(r.status) && !/no longer available|high demand|overloaded|unavailable|not found/i.test(lastErr)) break;
   }
-  if (last && last.status === 429) throw new Error('এখন AI-তে অনেক চাপ (ফ্রি সীমা)। এক মিনিট পরে আবার চেষ্টা করুন।');
-  throw new Error((last && last.msg) || 'AI ত্রুটি');
+  throw new Error(lastErr);
 }
 
-const CLS = { 6: 'ষষ্ঠ', 7: 'সপ্তম', 8: 'অষ্টম', 9: 'নবম', 10: 'দশম', 11: 'একাদশ', 12: 'দ্বাদশ', 13: 'এডমিশন' };
-
-const TUTOR_SYS = `তুমি "AI মশাই" — "Exam Site by Arghya"-এর স্নেহশীল, ধৈর্যশীল ও বন্ধুসুলভ AI শিক্ষক (মশাই মানে শিক্ষক)। তুমি একটি AI; কেউ জিজ্ঞেস করলে সেটা সত্যি বলবে। বাংলাদেশের NCTB পাঠ্যক্রম অনুযায়ী সহজ বাংলায় শেখাও।
-- শিক্ষার্থীকে "তুমি" বলে সম্বোধন করো। আন্তরিক ও উৎসাহব্যঞ্জক থাকো; ভুল করলে বকবে না, ধরিয়ে দিয়ে বুঝিয়ে দেবে।
-- আগে ধারণাটা বুঝিয়ে দাও, তারপর উদাহরণ। উত্তর ছোট ও পরিষ্কার রাখো (সাধারণত ২০০ শব্দের মধ্যে)।
-- দরকারে ধাপে ধাপে দেখাও। শেষে চাইলে একটি ছোট অনুশীলন প্রশ্ন দিতে পারো।
-- পড়াশোনার বাইরের বিষয় হলে বিনয়ের সঙ্গে পড়ার দিকে ফিরিয়ে আনো।
-- নিশ্চিত না হলে সেটা বলো; তথ্য বানিয়ে বলো না।`;
-
-const DOUBT_SYS = `তুমি একজন দক্ষ ডাউট সলভার। শিক্ষার্থীর সমস্যাটি ধাপে ধাপে সমাধান করো।
-- প্রথমে কী চাওয়া হয়েছে এক লাইনে লেখো, তারপর ব্যবহৃত সূত্র/ধারণা, তারপর ধাপগুলো।
-- শেষ লাইনে **চূড়ান্ত উত্তর** বোল্ডে দাও।
-- ছবি থাকলে ছবির লেখা/চিত্র পড়ে সমাধান করো; ছবি অস্পষ্ট বা অসম্পূর্ণ হলে সেটা স্পষ্ট বলো।
-- সহজ বাংলায় লেখো; ইংরেজি বিষয়ে প্রয়োজনে ইংরেজি ব্যবহার করো।`;
-
-const GENQ_SYS = `তুমি বাংলাদেশের অভিজ্ঞ প্রশ্নপ্রণেতা। শুধু বৈধ JSON অ্যারে আউটপুট দাও — কোনো ভূমিকা, মার্কডাউন বা ব্যাখ্যা নয়।
-প্রতিটি আইটেম: {"q":"প্রশ্ন","o":["অপশন১","অপশন২","অপশন৩","অপশন৪"],"a":সঠিক_অপশনের_ইনডেক্স(0-3),"m":1}
-নিয়ম:
-- বহুনির্বাচনি (MCQ); ঠিক একটি উত্তর সঠিক; বাকিগুলো বিশ্বাসযোগ্য ভুল (distractor)।
-- অপশনে "ক)/খ)" ইত্যাদি লেবেল লিখবে না। প্রশ্ন একটি লাইনে।
-- সঠিক উত্তরের অবস্থান (a) এলোমেলো রাখো।
-- তথ্যগতভাবে নির্ভুল ও পাঠ্যবইভিত্তিক হবে; অস্পষ্ট বা দ্ব্যর্থক প্রশ্ন নয়।
-- বাংলা বিষয়ে বাংলা সংখ্যা, ইংরেজি বিষয়ে ইংরেজিতে লেখো।
-- "avoid" তালিকার প্রশ্নের মতো প্রশ্ন আবার করবে না।`;
-
-function parseJSON(txt) {
-  const a = txt.indexOf('['), b = txt.lastIndexOf(']');
-  if (a < 0 || b <= a) throw new Error('AI সঠিক ফরম্যাটে উত্তর দেয়নি, আবার চেষ্টা করুন');
-  return JSON.parse(txt.slice(a, b + 1));
-}
-
-const EXPLAIN_SYS = `তুমি "AI মশাই" — স্নেহশীল AI শিক্ষক। শুধু বৈধ JSON অ্যারে দাও, কোনো ভূমিকা/মার্কডাউন নয়: [{"i":প্রশ্নের_নম্বর,"e":"ব্যাখ্যা"}]
-প্রতিটি ভুল প্রশ্নের জন্য ২–৩ বাক্যে (৬০ শব্দের মধ্যে) সহজ বাংলায় লেখো: কেন সঠিক উত্তরটি সঠিক, আর শিক্ষার্থীর বাছাই করা উত্তরটি কোথায় ভুল। শেষে চাইলে মনে রাখার একটি ছোট টিপস দাও।
-- দেওয়া "সঠিক উত্তর"কে সঠিক ধরেই ব্যাখ্যা করো। তবে সেটি নিশ্চিতভাবে ভুল মনে হলে ব্যাখ্যার শুরুতে "⚠️ উত্তরমালাটি আরেকবার যাচাই করুন।" লিখে কারণ বলো।
-- সহানুভূতিশীল ও উৎসাহব্যঞ্জক সুরে লেখো। তথ্য বানিয়ে বলো না।`;
-
-const dhakaDay = () => new Date(Date.now() + 6 * 3600e3).toISOString().slice(0, 10);
-const cleanQs = (arr) => (Array.isArray(arr) ? arr : [])
-  .filter((x) => x && typeof x.q === 'string' && Array.isArray(x.o) && x.o.length === 4 && x.o.every((o) => typeof o === 'string' && o.trim()) && Number.isInteger(x.a) && x.a >= 0 && x.a <= 3)
-  .map((x) => ({ q: x.q.replace(/\s+/g, ' ').trim(), o: x.o.map((o) => o.replace(/\s+/g, ' ').trim()), a: x.a, m: 1 }));
-
-// আজকের AI কুইজ (শ্রেণি অনুযায়ী দিনে একটি সেট; প্রথমজন চাইলে তৈরি হয়ে জমা থাকে)
-async function getQuiz(cls, day, create) {
-  const got = await sb(`/rest/v1/ai_daily_quiz?class_level=eq.${cls}&day=eq.${day}&select=q`);
-  if (got && got[0] && Array.isArray(got[0].q) && got[0].q.length) return got[0].q;
+// ---- সকালের প্রশ্ন (শ্রেণি + তারিখ অনুযায়ী একবার তৈরি হয়ে জমা থাকে) ----
+async function dailyQ(cls, day, create) {
+  const got = await sb(`/rest/v1/daily_wa?class_level=eq.${cls}&day=eq.${day}&select=q`);
+  if (got && got[0]) return got[0].q;
   if (!create) return null;
-  let n = 5;
-  try {
-    const c = await sb('/rest/v1/ai_config?key=eq.aiq_count&select=val');
-    if (c && c[0]) n = Math.max(1, Math.min(10, parseInt(c[0].val) || 5));
-  } catch (e) {}
-  const subj = cls >= 13 ? 'সাধারণ জ্ঞান, গণিত, ইংরেজি, বাংলা (এডমিশন পরীক্ষার মান)' : 'শ্রেণির মূল বিষয়গুলো (গণিত, বিজ্ঞান, ইংরেজি, বাংলা, বাংলাদেশ ও বিশ্বপরিচয় ইত্যাদি) থেকে মিশিয়ে';
-  const prompt = `শ্রেণি: ${CLS[cls] || cls}\nবিষয়: ${subj}\nকাঠিন্য: মাঝারি\nপ্রশ্নসংখ্যা: ${n}\nতারিখ: ${day} (প্রতিদিন নতুন প্রশ্ন দাও)\nবিভিন্ন বিষয় থেকে একটি করে প্রশ্ন দাও, একই বিষয়ের পুনরাবৃত্তি কম রাখো।\navoid: []`;
-  let qs = [];
-  for (let k = 0; k < 2 && qs.length < n; k++) {
+  const subj = SUBJ[new Date(day + 'T00:00:00Z').getUTCDay()];
+  const txt = await claudeText(
+    'তুমি বাংলাদেশের NCTB পাঠ্যক্রমের প্রশ্নপ্রণেতা। শুধু একটি JSON অবজেক্ট দাও, আর কিছু নয়: {"q":"প্রশ্ন","o":["","","",""],"a":0-3,"s":"বিষয়"}। প্রশ্ন এক লাইনে, অপশনে ক/খ লেবেল নেই, ঠিক একটি উত্তর সঠিক, তথ্য নির্ভুল।',
+    `শ্রেণি: ${CLS[cls] || cls}। বিষয়: ${subj}। একটি মাঝারি মানের MCQ বানাও। প্রশ্ন ও অপশন ছোট রাখো (মোট ২৫০ অক্ষরের মধ্যে)।`
+  );
+  const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
+  const q = JSON.parse(txt.slice(a, b + 1));
+  if (!q.q || !Array.isArray(q.o) || q.o.length !== 4 || !(q.a >= 0 && q.a <= 3)) throw new Error('দৈনিক প্রশ্ন ফরম্যাট ভুল');
+  q.s = q.s || subj;
+  await sb('/rest/v1/daily_wa', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' }, body: JSON.stringify({ class_level: cls, day, q }) });
+  return q;
+}
+const LET = ['ক', 'খ', 'গ', 'ঘ'];
+
+// ---- অ্যাক্টিভিটি/স্ট্রিক ----
+async function activity(uid, days) {
+  const since = new Date(Date.now() - days * 864e5).toISOString();
+  const rs = await sb(`/rest/v1/results?select=score,total,created_at,exams(title)&user_id=eq.${uid}&created_at=gte.${since}&order=created_at.desc&limit=500`);
+  const dr = await sb(`/rest/v1/daily_runs?select=created_at&user_id=eq.${uid}&created_at=gte.${since}&limit=300`).catch(() => []);
+  const set = new Set();
+  (rs || []).forEach((r) => set.add(dkey(Date.parse(r.created_at))));
+  (dr || []).forEach((r) => set.add(dkey(Date.parse(r.created_at))));
+  let t = Date.now(), cur = 0;
+  if (!set.has(dkey(t))) t -= 864e5;
+  while (set.has(dkey(t))) { cur++; t -= 864e5; }
+  return { rs: rs || [], streak: cur, doneToday: set.has(today()) };
+}
+async function userInfo(uid) {
+  const r = await fetch(`${SB}/auth/v1/admin/users/${uid}`, { headers: { apikey: SK, Authorization: 'Bearer ' + SK } });
+  const u = await r.json().catch(() => ({}));
+  const m = u.user_metadata || {};
+  return { name: m.full_name || (u.email || '').split('@')[0] || 'শিক্ষার্থী', cls: parseInt(m.class_level) || null };
+}
+
+async function jobDaily(dry) {
+  const day = today();
+  const f = encodeURIComponent(`(last_daily.is.null,last_daily.lt.${day})`);
+  const prefs = (await sb(`/rest/v1/wa_prefs?daily_on=eq.true&wa_number=not.is.null&or=${f}&select=user_id,wa_number,class_level&limit=2000`)) || [];
+  if (dry) return { dry: true, would_send: prefs.length };
+  const infos = await pool(prefs, 6, async (p) => ({ p, i: await userInfo(p.user_id) }));
+  const classes = [...new Set(infos.filter((x) => x && x.p).map((x) => x.p.class_level || x.i.cls || 8))];
+  const qmap = {};
+  for (const c of classes) { try { qmap[c] = await dailyQ(c, day, true); } catch (e) { qmap[c] = null; } }
+  const yday = dkey(Date.now() - 864e5);
+  const ymap = {};
+  for (const c of classes) { ymap[c] = await dailyQ(c, yday, false).catch(() => null); }
+  let sent = 0, failed = 0;
+  await pool(infos.filter((x) => x && x.p), 5, async ({ p, i }) => {
+    const cls = p.class_level || i.cls || 8;
+    const q = qmap[cls];
+    if (!q) { failed++; await wlog(p.user_id, 'daily', false, 'প্রশ্ন তৈরি হয়নি'); return; }
     try {
-      const out = await claude({ model: SMART, system: GENQ_SYS, messages: [{ role: 'user', content: prompt }], max_tokens: 4000, json: true });
-      cleanQs(parseJSON(out)).forEach((x) => { if (qs.length < n && !qs.some((y) => y.q === x.q)) qs.push(x); });
-    } catch (e) { if (k === 1 && !qs.length) throw e; }
-  }
-  if (qs.length < Math.min(3, n)) throw new Error('আজকের কুইজ তৈরি হয়নি, একটু পরে আবার চেষ্টা করুন');
-  await sb('/rest/v1/ai_daily_quiz', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' }, body: JSON.stringify({ class_level: cls, day, q: qs }) }).catch(() => {});
-  const again = await sb(`/rest/v1/ai_daily_quiz?class_level=eq.${cls}&day=eq.${day}&select=q`);
-  return (again && again[0] && again[0].q) || qs;
+      const act = await activity(p.user_id, 60);
+      const qt = `${q.q} ` + q.o.map((o, k) => `(${LET[k]}) ${o}`).join(' ');
+      const yq = ymap[cls];
+      const ya = yq ? `(${LET[yq.a]}) ${yq.o[yq.a]}` : 'আজই প্রথম প্রশ্ন';
+      const sl = act.streak > 0
+        ? `🔥 তোমার ${bn(act.streak)} দিনের স্ট্রিক চলছে — আজ একটি পরীক্ষা দিয়ে ধরে রাখো!`
+        : '🔥 আজ একটি পরীক্ষা দিয়ে নতুন স্ট্রিক শুরু করো!';
+      await sendTemplate(p.wa_number, TPL.daily, [i.name, q.s || 'সাধারণ', qt, ya, sl, SITE || 'আমাদের সাইট']);
+      await sb(`/rest/v1/wa_prefs?user_id=eq.${p.user_id}`, { method: 'PATCH', body: JSON.stringify({ last_daily: day }) });
+      await wlog(p.user_id, 'daily', true, 'ok');
+      sent++;
+    } catch (e) { failed++; await wlog(p.user_id, 'daily', false, e.message); }
+  });
+  return { sent, failed, total: prefs.length };
+}
+
+async function jobWeekly(dry) {
+  const day = today();
+  const lim = dkey(Date.now() - 5 * 864e5);
+  const f = encodeURIComponent(`(last_weekly.is.null,last_weekly.lt.${lim})`);
+  const prefs = (await sb(`/rest/v1/wa_prefs?weekly_on=eq.true&guardian_number=not.is.null&or=${f}&select=user_id,guardian_number&limit=2000`)) || [];
+  if (dry) return { dry: true, would_send: prefs.length };
+  let sent = 0, failed = 0;
+  await pool(prefs, 5, async (p) => {
+    try {
+      const i = await userInfo(p.user_id);
+      const act = await activity(p.user_id, 7);
+      const pcs = act.rs.filter((r) => r.total > 0).map((r) => Math.round((r.score / r.total) * 100));
+      const n = act.rs.length;
+      const avg = pcs.length ? Math.round(pcs.reduce((a, b) => a + b, 0) / pcs.length) : 0;
+      const best = pcs.length ? Math.max(...pcs) : 0;
+      const cm = !n ? 'এই সপ্তাহে কোনো পরীক্ষা দেওয়া হয়নি — নিয়মিত অনুশীলনে উৎসাহ দিন।'
+        : avg >= 80 ? 'চমৎকার ফল! এভাবেই চালিয়ে যেতে উৎসাহ দিন।'
+        : avg >= 50 ? 'ভালো চলছে; দুর্বল অংশগুলো আবার দেখলে ফল আরও ভালো হবে।'
+        : 'আরও অনুশীলন দরকার; প্রতিদিন অল্প সময় পড়ার অভ্যাস গড়তে সাহায্য করুন।';
+      await sendTemplate(p.guardian_number, TPL.weekly, [i.name, bn(n), bn(avg) + '%', bn(best) + '%', bn(act.streak), cm]);
+      await sb(`/rest/v1/wa_prefs?user_id=eq.${p.user_id}`, { method: 'PATCH', body: JSON.stringify({ last_weekly: day }) });
+      await wlog(p.user_id, 'weekly', true, 'ok');
+      sent++;
+    } catch (e) { failed++; await wlog(p.user_id, 'weekly', false, e.message); }
+  });
+  return { sent, failed, total: prefs.length };
+}
+
+// ---- গেম জোনের নতুন প্রশ্ন (Gemini দিয়ে প্রতিদিন; আগের সব প্রশ্ন যেমন আছে তেমনই থাকে) ----
+const GTHEMES = [
+  'বাংলাদেশের ইতিহাস ও মুক্তিযুদ্ধ', 'বিজ্ঞান ও প্রকৃতি', 'গণিত ও যুক্তি', 'ভূগোল ও বিশ্বের দেশ-রাজধানী',
+  'প্রাণী, পাখি ও গাছপালা', 'বাংলা ভাষা-সাহিত্য ও সংস্কৃতি', 'খেলাধুলা, প্রযুক্তি ও দৈনন্দিন জীবন',
+];
+const gnorm = (x) => String(x == null ? '' : x).replace(/\s+/g, ' ').trim().toLowerCase();
+function gshuf(a) { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; }
+function gjson(txt) {
+  const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
+  const j = JSON.parse(txt.slice(a, b + 1));
+  return Array.isArray(j.items) ? j.items : [];
+}
+// সংখ্যার ধাঁধার উত্তর আমরা নিজেরা যাচাই করি — এআই ভুল করলে সেটি বাদ যায়
+function seqOk(t) {
+  if (!Array.isArray(t) || t.length !== 6 || !t.every((x) => Number.isInteger(x) && Math.abs(x) <= 100000)) return false;
+  if (new Set(t).size < 4) return false;
+  const d = (a) => a.slice(1).map((x, i) => x - a[i]);
+  const same = (a) => a.length > 1 && a.every((x) => x === a[0]);
+  const d1 = d(t), d2 = d(d1), d3 = d(d2);
+  if (same(d1) && d1[0] !== 0) return true;
+  if (same(d2) && d2[0] !== 0) return true;
+  if (same(d3) && d3[0] !== 0) return true;
+  if (t[0] !== 0 && t.slice(1).every((x, i) => x * t[0] === t[i] * t[1]) && t[1] !== t[0]) return true;
+  if (t.slice(2).every((x, i) => x === t[i] + t[i + 1])) return true;
+  return false;
+}
+async function genSeq(day) {
+  const txt = await claudeText(
+    'তুমি স্কুলের শিক্ষার্থীদের জন্য সংখ্যার ধাঁধার প্রশ্নপ্রণেতা। শুধু JSON দাও: {"items":[{"t":[৬টি পূর্ণসংখ্যা]}]}। প্রতিটি t-তে ঠিক ৬টি সংখ্যা, একটি স্পষ্ট নিয়মে চলে (যোগ/বিয়োগ, গুণ, বর্গ, ঘন, ফিবোনাচ্চি-ধরন)। কোনো ব্যাখ্যা নয়।',
+    `তারিখ ${day}। ৮টি ভিন্ন ধরনের ধাঁধা দাও, সহজ থেকে একটু কঠিন। সংখ্যা ছোট রাখো (সর্বোচ্চ ৫ অঙ্ক)।`, 900);
+  return gjson(txt).filter((x) => seqOk(x.t)).map((x) => {
+    const t = x.t, ans = t[5], last = t[5] - t[4];
+    const cand = gshuf([ans + 1, ans - 1, ans + 2, ans - 2, ans + (last || 3), ans - (last || 3), ans + 10, ans * 2].filter((v, i, a) => v !== ans && a.indexOf(v) === i)).slice(0, 3);
+    const opts = gshuf([ans, ...cand]);
+    const f = (n) => bn(n).replace('-', '−');
+    return { game: 'numseq', q: t.slice(0, 5).map(f).join(', ') + ', ?', opts: opts.map(f), ans: opts.indexOf(ans) };
+  });
+}
+async function genTF(day, theme, avoid) {
+  const txt = await claudeText(
+    'তুমি বাংলাদেশের ৬ষ্ঠ–১০ম শ্রেণির শিক্ষার্থীদের জন্য "সত্য নাকি মিথ্যা" প্রশ্নপ্রণেতা। শুধু JSON দাও: {"items":[{"q":"বিবৃতি","a":true বা false}]}। বিবৃতি এক লাইনে (১৪০ অক্ষরের মধ্যে), তথ্য নিশ্চিতভাবে নির্ভুল ও বিতর্কহীন; সত্য ও মিথ্যা প্রায় সমান সংখ্যায়। অনিশ্চিত তথ্য দিও না।',
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme}। ১২টি নতুন বিবৃতি দাও। এগুলো আগে দেওয়া হয়েছে, পুনরাবৃত্তি করো না: ${avoid}`, 1800);
+  return gjson(txt).filter((x) => typeof x.q === 'string' && x.q.length >= 8 && x.q.length <= 160 && typeof x.a === 'boolean')
+    .map((x) => ({ game: 'tf', q: flat(x.q, 160), opts: ['সত্য', 'মিথ্যা'], ans: x.a ? 0 : 1 }));
+}
+async function genPic(day, theme, avoid) {
+  const txt = await claudeText(
+    'তুমি শিশু-কিশোরদের জন্য "ছবির ধাঁধা" বানাও। শুধু JSON দাও: {"items":[{"q":"১–৪টি ইমোজি","o":["","","",""],"a":0-3}]}। q-তে শুধু ইমোজি; o-তে ৪টি আলাদা ছোট বাংলা শব্দ (প্রতিটি ২০ অক্ষরের মধ্যে); ঠিক একটি উত্তর স্পষ্টভাবে সঠিক, বাকিগুলো বিভ্রান্তিকর হলেও ভুল। ইমোজির অর্থ নিয়ে দ্ব্যর্থতা রাখবে না।',
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme} (ইমোজি দিয়ে প্রকাশ করা যায় এমন)। ৮টি নতুন ধাঁধা দাও। এগুলো আগে দেওয়া হয়েছে: ${avoid}`, 1500);
+  return gjson(txt).filter((x) => typeof x.q === 'string' && x.q.length >= 1 && x.q.length <= 24 && /[^\x00-\x7F]/.test(x.q) && Array.isArray(x.o) && x.o.length === 4
+    && new Set(x.o.map(gnorm)).size === 4 && x.o.every((o) => typeof o === 'string' && o.length > 0 && o.length <= 24) && x.a >= 0 && x.a <= 3)
+    .map((x) => { const right = x.o[x.a], o = gshuf(x.o); return { game: 'pic', q: x.q.trim(), opts: o, ans: o.indexOf(right) }; });
+}
+async function genPairs(day, theme) {
+  const txt = await claudeText(
+    'তুমি কার্ড মেলানো খেলার জোড়া বানাও। শুধু JSON দাও: {"items":[{"a":"কার্ড ১","b":"কার্ড ২"}]}। প্রতিটি জোড়া নিশ্চিতভাবে সঠিক। উদাহরণের ধরন: ইংরেজি শব্দ ↔ বাংলা অর্থ, দেশ ↔ রাজধানী, প্রাণী ↔ ডাক/বাসস্থান, বিখ্যাত ব্যক্তি ↔ পরিচয়। প্রতিটি কার্ডের লেখা ১৬ অক্ষরের মধ্যে।',
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme}। ৮টি নতুন জোড়া দাও, একই ধরনের না হয়ে মিশ্র হোক।`, 900);
+  return gjson(txt).filter((x) => typeof x.a === 'string' && typeof x.b === 'string' && x.a.trim() && x.b.trim() && x.a.length <= 20 && x.b.length <= 20 && gnorm(x.a) !== gnorm(x.b))
+    .map((x) => ({ a: flat(x.a, 20), b: flat(x.b, 20) }));
+}
+async function jobGames(dry) {
+  const day = today();
+  const theme = GTHEMES[new Date(day + 'T00:00:00Z').getUTCDay()];
+  const oldP = (await sb('/rest/v1/game_puzzles?select=game,q&order=id.desc&limit=600')) || [];
+  const oldM = (await sb('/rest/v1/game_pairs?select=a,b&order=id.desc&limit=600')) || [];
+  const haveQ = new Set(oldP.map((x) => x.game + '|' + gnorm(x.q)));
+  const haveA = new Set(oldM.flatMap((x) => [gnorm(x.a), gnorm(x.b)]));
+  const avoid = (g) => oldP.filter((x) => x.game === g).slice(0, 30).map((x) => x.q).join(' | ') || 'কিছু নেই';
+  const [seq, tf, pic, pr] = await Promise.all([
+    genSeq(day).catch(() => []), genTF(day, theme, avoid('tf')).catch(() => []),
+    genPic(day, theme, avoid('pic')).catch(() => []), genPairs(day, theme).catch(() => []),
+  ]);
+  const seen = new Set();
+  const puz = [...seq, ...tf, ...pic].filter((x) => { const k = x.game + '|' + gnorm(x.q); if (haveQ.has(k) || seen.has(k)) return false; seen.add(k); return true; });
+  const seenA = new Set();
+  const prs = pr.filter((x) => { const a = gnorm(x.a), b = gnorm(x.b); if (haveA.has(a) || haveA.has(b) || seenA.has(a) || seenA.has(b)) return false; seenA.add(a); seenA.add(b); return true; });
+  const cnt = (g) => puz.filter((x) => x.game === g).length;
+  const out = { ok: true, day, theme, numseq: cnt('numseq'), tf: cnt('tf'), pic: cnt('pic'), pairs: prs.length };
+  if (dry) return { ...out, dry: true };
+  if (!puz.length && !prs.length) throw new Error('এআই থেকে কোনো বৈধ প্রশ্ন পাওয়া যায়নি — একটু পরে আবার চেষ্টা করুন');
+  if (puz.length) await sb('/rest/v1/game_puzzles', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(puz) });
+  if (prs.length) await sb('/rest/v1/game_pairs', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(prs) });
+  return out;
 }
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST দিন' });
   try {
-    if (!SB || !SK) return res.status(500).json({ error: 'সার্ভারে SUPABASE_URL / SUPABASE_SERVICE_KEY সেট করা নেই' });
+    if (!SB || !SK) return res.status(500).json({ error: 'SUPABASE_URL / SUPABASE_SERVICE_KEY সেট করা নেই' });
+
+    // Vercel Cron (GET) — Authorization: Bearer CRON_SECRET
+    if (req.method === 'GET') {
+      const cs = process.env.CRON_SECRET;
+      if (!cs || (req.headers.authorization || '') !== 'Bearer ' + cs) return res.status(401).json({ error: 'unauthorized' });
+      const job = (req.query && req.query.job) || '';
+      if (job === 'games') return res.json(await jobGames(false));
+      if (!WT || !PID) return res.status(500).json({ error: 'WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
+      if (job === 'daily') return res.json(await jobDaily(false));
+      if (job === 'weekly') return res.json(await jobWeekly(false));
+      return res.status(400).json({ error: 'job=daily|weekly|games দিন' });
+    }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
+
     const u = await authUser(req);
     if (!u) return res.status(401).json({ error: 'লগইন করুন' });
     const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
-    const act = b.action;
+    if ((!WT || !PID) && !(b.action === 'run' && b.job === 'games')) return res.status(500).json({ error: 'সার্ভারে WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
 
-    if (act === 'health') {
-      if (!(await isAdmin(u.id))) return res.status(403).json({ error: 'শুধু অ্যাডমিন' });
-      const has = (k) => !!process.env[k];
-      return res.json({
-        ok: true,
-        env: Object.fromEntries(
-          ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'GEMINI_API_KEY', 'WA_TOKEN', 'WA_PHONE_ID', 'CRON_SECRET', 'SITE_URL'].map((k) => [k, has(k)])
-        ),
-      });
-    }
-
-    if (!GK) return res.status(500).json({ error: 'সার্ভারে GEMINI_API_KEY সেট করা নেই' });
-
-    if (act === 'genq') {
-      if (!(await isAdmin(u.id))) return res.status(403).json({ error: 'শুধু অ্যাডমিন' });
-      const n = Math.max(1, Math.min(8, parseInt(b.count) || 6));
-      const avoid = (b.avoid || []).slice(-40).map((s) => String(s).slice(0, 80));
-      const prompt = `শ্রেণি: ${CLS[b.class_level] || b.class_level || 'উল্লেখ নেই'}
-বিষয়: ${String(b.subject || '').slice(0, 80)}
-অধ্যায়/টপিক: ${String(b.chapter || '').slice(0, 120)}
-কাঠিন্য: ${String(b.difficulty || 'বার্ষিক পরীক্ষার মান').slice(0, 40)}
-প্রশ্নসংখ্যা: ${n}
-${b.notes ? 'এই নোট/টেক্সটের ভিত্তিতে বানাও:\n' + String(b.notes).slice(0, 6000) : ''}
-avoid: ${JSON.stringify(avoid)}`;
-      const out = await claude({ model: SMART, system: GENQ_SYS, messages: [{ role: 'user', content: prompt }], max_tokens: 6000, json: true });
-      const arr = parseJSON(out)
-        .filter((x) => x && typeof x.q === 'string' && Array.isArray(x.o) && x.o.length === 4 && x.o.every((o) => typeof o === 'string' && o.trim()) && Number.isInteger(x.a) && x.a >= 0 && x.a <= 3)
-        .map((x) => ({ q: x.q.replace(/\s+/g, ' ').trim(), o: x.o.map((o) => o.replace(/\s+/g, ' ').trim()), a: x.a, m: Math.max(1, parseInt(x.m) || 1) }));
-      return res.json({ questions: arr });
-    }
-
-    if (u.is_anonymous || !u.email) return res.status(403).json({ error: 'এই ফিচারের জন্য ইমেইল/Google অ্যাকাউন্টে লগইন করুন' });
-
-    if (act === 'tutor') {
-      let msgs = (b.messages || []).slice(-10).map((m) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: String(m.content || '').slice(0, 2000),
-      })).filter((m) => m.content);
-      while (msgs.length && msgs[0].role !== 'user') msgs.shift();
-      if (!msgs.length || msgs[msgs.length - 1].role !== 'user') return res.status(400).json({ error: 'প্রশ্ন লিখুন' });
-      const how = await rpc('ai_charge', { p_user: u.id, p_kind: 'tutor' });
-      if (how === 'none') return res.status(402).json({ error: 'আজকের ফ্রি মেসেজ শেষ। কয়েন শপ থেকে "মশাই বুস্ট" কিনুন অথবা কাল আবার আসুন।' });
+    // স্টুডেন্ট: জমা দেওয়া মাত্র নিজের WhatsApp-এ উত্তরপত্র PDF
+    if (b.action === 'result') {
+      if (u.is_anonymous || !u.email) return res.status(403).json({ error: 'লগইন প্রয়োজন' });
+      const pr = await sb(`/rest/v1/wa_prefs?user_id=eq.${u.id}&select=wa_number,result_on`);
+      const p = pr && pr[0];
+      if (!p || !p.result_on || !p.wa_number) return res.status(400).json({ error: 'WhatsApp অটো-সেন্ড চালু নেই' });
+      const used = await sb(`/rest/v1/usage_log?user_id=eq.${u.id}&kind=eq.wa&day=eq.${today()}&select=id`);
+      if ((used || []).length >= 15) return res.status(429).json({ error: 'আজকের সীমা শেষ' });
+      const pdf = String(b.pdf || '');
+      if (!pdf || pdf.length > 4_000_000) return res.status(400).json({ error: 'PDF ঠিক নেই বা বেশি বড়' });
+      const i = await userInfo(u.id);
       try {
-        const sys = TUTOR_SYS + (b.class_level ? `\nশিক্ষার্থীর শ্রেণি: ${CLS[b.class_level] || b.class_level}` : '');
-        const reply = await claude({ model: FAST, system: sys, messages: msgs, max_tokens: 1000 });
-        return res.json({ reply, how });
-      } catch (e) {
-        await rpc('ai_refund', { p_user: u.id, p_kind: 'tutor', p_how: how }).catch(() => {});
-        throw e;
-      }
+        const mid = await uploadPdf(pdf);
+        await sendTemplate(
+          p.wa_number, TPL.result,
+          [i.name, flat(b.exam_title, 120), flat(b.score, 40)],
+          { type: 'document', document: { id: mid, filename: 'answer-sheet.pdf' } }
+        );
+        await sb('/rest/v1/usage_log', { method: 'POST', body: JSON.stringify({ user_id: u.id, kind: 'wa' }) });
+        await wlog(u.id, 'result', true, 'ok');
+        return res.json({ ok: true });
+      } catch (e) { await wlog(u.id, 'result', false, e.message); throw e; }
     }
 
-    if (act === 'doubt') {
-      const q = String(b.question || '').trim().slice(0, 3000);
-      const img = typeof b.image === 'string' ? b.image : '';
-      if (!q && !img) return res.status(400).json({ error: 'প্রশ্ন লিখুন বা ছবি দিন' });
-      if (img.length > 3_000_000) return res.status(413).json({ error: 'ছবি বেশি বড়' });
-      const how = await rpc('ai_charge', { p_user: u.id, p_kind: 'doubt' });
-      if (how === 'none') return res.status(402).json({ error: 'আজকের ফ্রি ডাউট শেষ এবং যথেষ্ট কয়েন নেই। কয়েন শপ থেকে ডাউট প্যাক কিনুন।' });
-      try {
-        const content = [];
-        if (img) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: img } });
-        content.push({ type: 'text', text: (b.subject ? 'বিষয়: ' + String(b.subject).slice(0, 60) + '\n' : '') + (q || 'ছবির প্রশ্নটি সমাধান করো।') });
-        const ans = await claude({ model: SMART, system: DOUBT_SYS, messages: [{ role: 'user', content }], max_tokens: 2500 });
-        await sb('/rest/v1/doubts', {
-          method: 'POST',
-          body: JSON.stringify({ user_id: u.id, subject: b.subject || null, question: q || '(ছবি)', answer: ans, had_image: !!img }),
-        }).catch(() => {});
-        return res.json({ answer: ans, how });
-      } catch (e) {
-        await rpc('ai_refund', { p_user: u.id, p_kind: 'doubt', p_how: how }).catch(() => {});
-        throw e;
-      }
+    // অ্যাডমিন টুলস
+    if (!(await isAdmin(u.id))) return res.status(403).json({ error: 'শুধু অ্যাডমিন' });
+    if (b.action === 'run') {
+      if (b.job === 'daily') return res.json(await jobDaily(!!b.dry));
+      if (b.job === 'weekly') return res.json(await jobWeekly(!!b.dry));
+      if (b.job === 'games') return res.json(await jobGames(!!b.dry));
+      return res.status(400).json({ error: 'job ভুল' });
     }
-
-    if (act === 'explain') {
-      const raw = Array.isArray(b.items) ? b.items.slice(0, 15) : [];
-      const items = raw.map((x, i) => ({
-        i,
-        body: String((x && x.body) || '').slice(0, 500),
-        options: (Array.isArray(x && x.options) ? x.options : []).slice(0, 6).map((o) => String(o).slice(0, 200)),
-        correct: Number.isInteger(x && x.correct) ? x.correct : -1,
-        chosen: Number.isInteger(x && x.chosen) ? x.chosen : -1,
-      })).filter((x) => x.body && x.options.length >= 2 && x.correct >= 0 && x.correct < x.options.length);
-      if (!items.length) return res.status(400).json({ error: 'ব্যাখ্যা করার মতো প্রশ্ন পাওয়া যায়নি' });
-      const how = await rpc('ai_charge', { p_user: u.id, p_kind: 'explain' });
-      if (how === 'none') return res.status(402).json({ error: 'আজকের ফ্রি ব্যাখ্যা শেষ এবং যথেষ্ট কয়েন নেই। পরীক্ষা দিয়ে কয়েন জমান, অথবা কাল আবার আসুন।' });
-      try {
-        const prompt = items.map((x) => `প্রশ্ন ${x.i}: ${x.body}\n` + x.options.map((o, k) => `(${k + 1}) ${o}`).join('\n') + `\nসঠিক উত্তর: (${x.correct + 1}) ${x.options[x.correct]}\nশিক্ষার্থীর উত্তর: ` + (x.chosen >= 0 && x.chosen < x.options.length ? `(${x.chosen + 1}) ${x.options[x.chosen]}` : 'দেওয়া হয়নি')).join('\n\n');
-        const out = await claude({ model: SMART, system: EXPLAIN_SYS, messages: [{ role: 'user', content: prompt }], max_tokens: 4000, json: true });
-        const arr = parseJSON(out).filter((x) => x && Number.isInteger(x.i) && typeof x.e === 'string' && x.e.trim()).map((x) => ({ i: x.i, e: x.e.trim() }));
-        if (!arr.length) throw new Error('ব্যাখ্যা তৈরি হয়নি, আবার চেষ্টা করুন');
-        return res.json({ explanations: arr, how });
-      } catch (e) {
-        await rpc('ai_refund', { p_user: u.id, p_kind: 'explain', p_how: how }).catch(() => {});
-        throw e;
-      }
+    if (b.action === 'test') {
+      let to = String(b.to || '').replace(/\D/g, '');
+      if (/^01\d{9}$/.test(to)) to = '88' + to;
+      if (!/^8801\d{9}$/.test(to)) return res.status(400).json({ error: 'সঠিক নম্বর দিন' });
+      await sendTemplate(to, 'hello_world', [], null, 'en_US'); // Meta-র তৈরি করা ডিফল্ট টেমপ্লেট
+      return res.json({ ok: true });
     }
-
-    if (act === 'aiq_get' || act === 'aiq_submit') {
-      const cls = parseInt(b.class_level);
-      if (!(cls >= 6 && cls <= 13)) return res.status(400).json({ error: 'শ্রেণি বেছে নিন' });
-      const day = dhakaDay();
-      if (act === 'aiq_get') {
-        const done = await sb(`/rest/v1/ai_daily_done?user_id=eq.${u.id}&day=eq.${day}&select=score,total`);
-        if (done && done[0]) return res.json({ done: true, score: done[0].score, total: done[0].total });
-        const quiz = await getQuiz(cls, day, true);
-        return res.json({ done: false, day, questions: quiz.map((x) => ({ q: x.q, o: x.o })) });
-      }
-      const quiz = await getQuiz(cls, day, false);
-      if (!quiz) return res.status(400).json({ error: 'আগে আজকের কুইজটি খুলুন' });
-      const ans = Array.isArray(b.answers) ? b.answers : [];
-      let score = 0;
-      quiz.forEach((x, i) => { if (Number.isInteger(ans[i]) && ans[i] === x.a) score++; });
-      const coins = await rpc('ai_quiz_award', { p_user: u.id, p_day: day, p_cls: cls, p_score: score, p_total: quiz.length });
-      if (coins === -1) return res.status(409).json({ error: 'আজকের কুইজ আগেই জমা দেওয়া হয়েছে। কাল নতুন কুইজ আসবে!' });
-      return res.json({ score, total: quiz.length, coins, keys: quiz.map((x) => x.a), questions: quiz.map((x) => ({ q: x.q, o: x.o })) });
-    }
-
     return res.status(400).json({ error: 'অজানা action' });
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e) });
