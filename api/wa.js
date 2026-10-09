@@ -233,6 +233,91 @@ async function jobWeekly(dry) {
   return { sent, failed, total: prefs.length };
 }
 
+// ---- গেম জোনের নতুন প্রশ্ন (Gemini দিয়ে প্রতিদিন; আগের সব প্রশ্ন যেমন আছে তেমনই থাকে) ----
+const GTHEMES = [
+  'বাংলাদেশের ইতিহাস ও মুক্তিযুদ্ধ', 'বিজ্ঞান ও প্রকৃতি', 'গণিত ও যুক্তি', 'ভূগোল ও বিশ্বের দেশ-রাজধানী',
+  'প্রাণী, পাখি ও গাছপালা', 'বাংলা ভাষা-সাহিত্য ও সংস্কৃতি', 'খেলাধুলা, প্রযুক্তি ও দৈনন্দিন জীবন',
+];
+const gnorm = (x) => String(x == null ? '' : x).replace(/\s+/g, ' ').trim().toLowerCase();
+function gshuf(a) { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; }
+function gjson(txt) {
+  const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
+  const j = JSON.parse(txt.slice(a, b + 1));
+  return Array.isArray(j.items) ? j.items : [];
+}
+// সংখ্যার ধাঁধার উত্তর আমরা নিজেরা যাচাই করি — এআই ভুল করলে সেটি বাদ যায়
+function seqOk(t) {
+  if (!Array.isArray(t) || t.length !== 6 || !t.every((x) => Number.isInteger(x) && Math.abs(x) <= 100000)) return false;
+  if (new Set(t).size < 4) return false;
+  const d = (a) => a.slice(1).map((x, i) => x - a[i]);
+  const same = (a) => a.length > 1 && a.every((x) => x === a[0]);
+  const d1 = d(t), d2 = d(d1), d3 = d(d2);
+  if (same(d1) && d1[0] !== 0) return true;
+  if (same(d2) && d2[0] !== 0) return true;
+  if (same(d3) && d3[0] !== 0) return true;
+  if (t[0] !== 0 && t.slice(1).every((x, i) => x * t[0] === t[i] * t[1]) && t[1] !== t[0]) return true;
+  if (t.slice(2).every((x, i) => x === t[i] + t[i + 1])) return true;
+  return false;
+}
+async function genSeq(day) {
+  const txt = await claudeText(
+    'তুমি স্কুলের শিক্ষার্থীদের জন্য সংখ্যার ধাঁধার প্রশ্নপ্রণেতা। শুধু JSON দাও: {"items":[{"t":[৬টি পূর্ণসংখ্যা]}]}। প্রতিটি t-তে ঠিক ৬টি সংখ্যা, একটি স্পষ্ট নিয়মে চলে (যোগ/বিয়োগ, গুণ, বর্গ, ঘন, ফিবোনাচ্চি-ধরন)। কোনো ব্যাখ্যা নয়।',
+    `তারিখ ${day}। ৮টি ভিন্ন ধরনের ধাঁধা দাও, সহজ থেকে একটু কঠিন। সংখ্যা ছোট রাখো (সর্বোচ্চ ৫ অঙ্ক)।`, 900);
+  return gjson(txt).filter((x) => seqOk(x.t)).map((x) => {
+    const t = x.t, ans = t[5], last = t[5] - t[4];
+    const cand = gshuf([ans + 1, ans - 1, ans + 2, ans - 2, ans + (last || 3), ans - (last || 3), ans + 10, ans * 2].filter((v, i, a) => v !== ans && a.indexOf(v) === i)).slice(0, 3);
+    const opts = gshuf([ans, ...cand]);
+    const f = (n) => bn(n).replace('-', '−');
+    return { game: 'numseq', q: t.slice(0, 5).map(f).join(', ') + ', ?', opts: opts.map(f), ans: opts.indexOf(ans) };
+  });
+}
+async function genTF(day, theme, avoid) {
+  const txt = await claudeText(
+    'তুমি বাংলাদেশের ৬ষ্ঠ–১০ম শ্রেণির শিক্ষার্থীদের জন্য "সত্য নাকি মিথ্যা" প্রশ্নপ্রণেতা। শুধু JSON দাও: {"items":[{"q":"বিবৃতি","a":true বা false}]}। বিবৃতি এক লাইনে (১৪০ অক্ষরের মধ্যে), তথ্য নিশ্চিতভাবে নির্ভুল ও বিতর্কহীন; সত্য ও মিথ্যা প্রায় সমান সংখ্যায়। অনিশ্চিত তথ্য দিও না।',
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme}। ১২টি নতুন বিবৃতি দাও। এগুলো আগে দেওয়া হয়েছে, পুনরাবৃত্তি করো না: ${avoid}`, 1800);
+  return gjson(txt).filter((x) => typeof x.q === 'string' && x.q.length >= 8 && x.q.length <= 160 && typeof x.a === 'boolean')
+    .map((x) => ({ game: 'tf', q: flat(x.q, 160), opts: ['সত্য', 'মিথ্যা'], ans: x.a ? 0 : 1 }));
+}
+async function genPic(day, theme, avoid) {
+  const txt = await claudeText(
+    'তুমি শিশু-কিশোরদের জন্য "ছবির ধাঁধা" বানাও। শুধু JSON দাও: {"items":[{"q":"১–৪টি ইমোজি","o":["","","",""],"a":0-3}]}। q-তে শুধু ইমোজি; o-তে ৪টি আলাদা ছোট বাংলা শব্দ (প্রতিটি ২০ অক্ষরের মধ্যে); ঠিক একটি উত্তর স্পষ্টভাবে সঠিক, বাকিগুলো বিভ্রান্তিকর হলেও ভুল। ইমোজির অর্থ নিয়ে দ্ব্যর্থতা রাখবে না।',
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme} (ইমোজি দিয়ে প্রকাশ করা যায় এমন)। ৮টি নতুন ধাঁধা দাও। এগুলো আগে দেওয়া হয়েছে: ${avoid}`, 1500);
+  return gjson(txt).filter((x) => typeof x.q === 'string' && x.q.length >= 1 && x.q.length <= 24 && /[^\x00-\x7F]/.test(x.q) && Array.isArray(x.o) && x.o.length === 4
+    && new Set(x.o.map(gnorm)).size === 4 && x.o.every((o) => typeof o === 'string' && o.length > 0 && o.length <= 24) && x.a >= 0 && x.a <= 3)
+    .map((x) => { const right = x.o[x.a], o = gshuf(x.o); return { game: 'pic', q: x.q.trim(), opts: o, ans: o.indexOf(right) }; });
+}
+async function genPairs(day, theme) {
+  const txt = await claudeText(
+    'তুমি কার্ড মেলানো খেলার জোড়া বানাও। শুধু JSON দাও: {"items":[{"a":"কার্ড ১","b":"কার্ড ২"}]}। প্রতিটি জোড়া নিশ্চিতভাবে সঠিক। উদাহরণের ধরন: ইংরেজি শব্দ ↔ বাংলা অর্থ, দেশ ↔ রাজধানী, প্রাণী ↔ ডাক/বাসস্থান, বিখ্যাত ব্যক্তি ↔ পরিচয়। প্রতিটি কার্ডের লেখা ১৬ অক্ষরের মধ্যে।',
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme}। ৮টি নতুন জোড়া দাও, একই ধরনের না হয়ে মিশ্র হোক।`, 900);
+  return gjson(txt).filter((x) => typeof x.a === 'string' && typeof x.b === 'string' && x.a.trim() && x.b.trim() && x.a.length <= 20 && x.b.length <= 20 && gnorm(x.a) !== gnorm(x.b))
+    .map((x) => ({ a: flat(x.a, 20), b: flat(x.b, 20) }));
+}
+async function jobGames(dry) {
+  const day = today();
+  const theme = GTHEMES[new Date(day + 'T00:00:00Z').getUTCDay()];
+  const oldP = (await sb('/rest/v1/game_puzzles?select=game,q&order=id.desc&limit=600')) || [];
+  const oldM = (await sb('/rest/v1/game_pairs?select=a,b&order=id.desc&limit=600')) || [];
+  const haveQ = new Set(oldP.map((x) => x.game + '|' + gnorm(x.q)));
+  const haveA = new Set(oldM.flatMap((x) => [gnorm(x.a), gnorm(x.b)]));
+  const avoid = (g) => oldP.filter((x) => x.game === g).slice(0, 30).map((x) => x.q).join(' | ') || 'কিছু নেই';
+  const [seq, tf, pic, pr] = await Promise.all([
+    genSeq(day).catch(() => []), genTF(day, theme, avoid('tf')).catch(() => []),
+    genPic(day, theme, avoid('pic')).catch(() => []), genPairs(day, theme).catch(() => []),
+  ]);
+  const seen = new Set();
+  const puz = [...seq, ...tf, ...pic].filter((x) => { const k = x.game + '|' + gnorm(x.q); if (haveQ.has(k) || seen.has(k)) return false; seen.add(k); return true; });
+  const seenA = new Set();
+  const prs = pr.filter((x) => { const a = gnorm(x.a), b = gnorm(x.b); if (haveA.has(a) || haveA.has(b) || seenA.has(a) || seenA.has(b)) return false; seenA.add(a); seenA.add(b); return true; });
+  const cnt = (g) => puz.filter((x) => x.game === g).length;
+  const out = { ok: true, day, theme, numseq: cnt('numseq'), tf: cnt('tf'), pic: cnt('pic'), pairs: prs.length };
+  if (dry) return { ...out, dry: true };
+  if (!puz.length && !prs.length) throw new Error('এআই থেকে কোনো বৈধ প্রশ্ন পাওয়া যায়নি — একটু পরে আবার চেষ্টা করুন');
+  if (puz.length) await sb('/rest/v1/game_puzzles', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(puz) });
+  if (prs.length) await sb('/rest/v1/game_pairs', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(prs) });
+  return out;
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   try {
@@ -242,18 +327,19 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const cs = process.env.CRON_SECRET;
       if (!cs || (req.headers.authorization || '') !== 'Bearer ' + cs) return res.status(401).json({ error: 'unauthorized' });
-      if (!WT || !PID) return res.status(500).json({ error: 'WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
       const job = (req.query && req.query.job) || '';
+      if (job === 'games') return res.json(await jobGames(false));
+      if (!WT || !PID) return res.status(500).json({ error: 'WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
       if (job === 'daily') return res.json(await jobDaily(false));
       if (job === 'weekly') return res.json(await jobWeekly(false));
-      return res.status(400).json({ error: 'job=daily|weekly দিন' });
+      return res.status(400).json({ error: 'job=daily|weekly|games দিন' });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
 
     const u = await authUser(req);
     if (!u) return res.status(401).json({ error: 'লগইন করুন' });
     const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
-    if (!WT || !PID) return res.status(500).json({ error: 'সার্ভারে WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
+    if ((!WT || !PID) && !(b.action === 'run' && b.job === 'games')) return res.status(500).json({ error: 'সার্ভারে WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
 
     // স্টুডেন্ট: জমা দেওয়া মাত্র নিজের WhatsApp-এ উত্তরপত্র PDF
     if (b.action === 'result') {
@@ -284,6 +370,7 @@ module.exports = async (req, res) => {
     if (b.action === 'run') {
       if (b.job === 'daily') return res.json(await jobDaily(!!b.dry));
       if (b.job === 'weekly') return res.json(await jobWeekly(!!b.dry));
+      if (b.job === 'games') return res.json(await jobGames(!!b.dry));
       return res.status(400).json({ error: 'job ভুল' });
     }
     if (b.action === 'test') {
