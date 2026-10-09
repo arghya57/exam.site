@@ -1,11 +1,13 @@
 // api/ai.js — Vercel Serverless Function (Node) — Google Gemini সংস্করণ (ফ্রি টিয়ারে চলে)
+// অ্যাকশন: genq (অ্যাডমিন) · tutor (AI মশাই) · doubt · explain (ভুল উত্তরের ব্যাখ্যা) · aiq_get/aiq_submit (AI ডেইলি কুইজ)
 // Env: SUPABASE_URL, SUPABASE_SERVICE_KEY, GEMINI_API_KEY
-// ঐচ্ছিক: AI_MODEL_FAST, AI_MODEL_SMART
+// ঐচ্ছিক: AI_MODEL_FAST, AI_MODEL_SMART, AI_MODEL_FALLBACK (কমা দিয়ে আলাদা; মূল মডেল ব্যস্ত থাকলে এগুলো চেষ্টা হবে)
 const SB = process.env.SUPABASE_URL;
 const SK = process.env.SUPABASE_SERVICE_KEY;
 const GK = process.env.GEMINI_API_KEY;
-const FAST = process.env.AI_MODEL_FAST || 'gemini-2.5-flash-lite';
-const SMART = process.env.AI_MODEL_SMART || 'gemini-2.5-flash';
+const FAST = process.env.AI_MODEL_FAST || 'gemini-3.5-flash-lite';
+const SMART = process.env.AI_MODEL_SMART || 'gemini-3.8-flash';
+const FALLBACKS = (process.env.AI_MODEL_FALLBACK || 'gemini-3.5-flash-lite,gemini-3.5-flash,gemini-3.8-flash').split(',').map((x) => x.trim()).filter(Boolean);
 
 async function sb(path, opt = {}) {
   const r = await fetch(SB + path, {
@@ -43,6 +45,29 @@ function toParts(content) {
       : { text: String(c.text || '') }
   );
 }
+const noThink = new Set(); // যেসব মডেল thinkingConfig নেয় না
+async function gcall(model, body) {
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
+  const go = (bd) => fetch(url, { method: 'POST', headers: { 'x-goog-api-key': GK, 'content-type': 'application/json' }, body: JSON.stringify(bd) });
+  let bd = body;
+  if (noThink.has(model)) {
+    bd = JSON.parse(JSON.stringify(body));
+    delete bd.generationConfig.thinkingConfig;
+  }
+  let r = await go(bd);
+  if (r.status === 400 && bd.generationConfig.thinkingConfig) {
+    // কিছু নতুন মডেল thinkingConfig নেয় না — ওটা ছাড়া আবার চেষ্টা
+    noThink.add(model);
+    const b2 = JSON.parse(JSON.stringify(body));
+    delete b2.generationConfig.thinkingConfig;
+    b2.generationConfig.maxOutputTokens = Math.max((body.generationConfig.maxOutputTokens || 1000) * 2, 2000);
+    r = await go(b2);
+  }
+  const j = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, j };
+}
+const retryable = (st, msg) => [404, 429, 500, 502, 503, 504].includes(st) || /no longer available|high demand|overloaded|unavailable|not found|try again later/i.test(msg || '');
+
 async function claude({ model, system, messages, max_tokens = 1200, json = false }) {
   const body = {
     systemInstruction: { parts: [{ text: system }] },
@@ -54,36 +79,32 @@ async function claude({ model, system, messages, max_tokens = 1200, json = false
       ...(json ? { responseMimeType: 'application/json' } : {}),
     },
   };
-  const call = (bd) => fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
-    method: 'POST',
-    headers: { 'x-goog-api-key': GK, 'content-type': 'application/json' },
-    body: JSON.stringify(bd),
-  });
-  let r = await call(body);
-  if (r.status === 400) {
-    // কিছু নতুন মডেল thinkingConfig/thinkingBudget নেয় না — ওটা ছাড়া আবার চেষ্টা
-    const b2 = JSON.parse(JSON.stringify(body));
-    delete b2.generationConfig.thinkingConfig;
-    b2.generationConfig.maxOutputTokens = Math.max(max_tokens * 2, 2000);
-    r = await call(b2);
+  // মূল মডেল ব্যস্ত/অনুপস্থিত হলে নিজে থেকে পরেরটায় যাবে
+  const models = [model, ...FALLBACKS].filter((m, i, a) => a.indexOf(m) === i);
+  let last = null;
+  for (const m of models) {
+    const { ok, status, j } = await gcall(m, body);
+    if (ok) {
+      const c = j.candidates && j.candidates[0];
+      const text = ((c && c.content && c.content.parts) || []).map((p) => p.text || '').join('');
+      if (text) return text;
+      const why = (j.promptFeedback && j.promptFeedback.blockReason) || (c && c.finishReason) || '';
+      last = { status: 200, msg: 'AI উত্তর দেয়নি' + (why ? ' (' + why + ')' : '') + ', আবার চেষ্টা করুন' };
+      if (why === 'SAFETY' || why === 'PROHIBITED_CONTENT') break;
+      continue;
+    }
+    const msg = (j.error && j.error.message) || 'AI ত্রুটি ' + status;
+    last = { status, msg };
+    if (!retryable(status, msg)) break;
   }
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    if (r.status === 429) throw new Error('এখন AI-তে অনেক চাপ (ফ্রি সীমা)। এক মিনিট পরে আবার চেষ্টা করুন।');
-    throw new Error((j.error && j.error.message) || 'AI ত্রুটি ' + r.status);
-  }
-  const c = j.candidates && j.candidates[0];
-  const text = ((c && c.content && c.content.parts) || []).map((p) => p.text || '').join('');
-  if (!text) {
-    const why = (j.promptFeedback && j.promptFeedback.blockReason) || (c && c.finishReason) || '';
-    throw new Error('AI উত্তর দেয়নি' + (why ? ' (' + why + ')' : '') + ', আবার চেষ্টা করুন');
-  }
-  return text;
+  if (last && last.status === 429) throw new Error('এখন AI-তে অনেক চাপ (ফ্রি সীমা)। এক মিনিট পরে আবার চেষ্টা করুন।');
+  throw new Error((last && last.msg) || 'AI ত্রুটি');
 }
 
 const CLS = { 6: 'ষষ্ঠ', 7: 'সপ্তম', 8: 'অষ্টম', 9: 'নবম', 10: 'দশম', 11: 'একাদশ', 12: 'দ্বাদশ', 13: 'এডমিশন' };
 
-const TUTOR_SYS = `তুমি "Exam Site by Arghya"-এর বন্ধুসুলভ AI টিউটর। বাংলাদেশের NCTB পাঠ্যক্রম অনুযায়ী সহজ বাংলায় শেখাও।
+const TUTOR_SYS = `তুমি "AI মশাই" — "Exam Site by Arghya"-এর স্নেহশীল, ধৈর্যশীল ও বন্ধুসুলভ AI শিক্ষক (মশাই মানে শিক্ষক)। তুমি একটি AI; কেউ জিজ্ঞেস করলে সেটা সত্যি বলবে। বাংলাদেশের NCTB পাঠ্যক্রম অনুযায়ী সহজ বাংলায় শেখাও।
+- শিক্ষার্থীকে "তুমি" বলে সম্বোধন করো। আন্তরিক ও উৎসাহব্যঞ্জক থাকো; ভুল করলে বকবে না, ধরিয়ে দিয়ে বুঝিয়ে দেবে।
 - আগে ধারণাটা বুঝিয়ে দাও, তারপর উদাহরণ। উত্তর ছোট ও পরিষ্কার রাখো (সাধারণত ২০০ শব্দের মধ্যে)।
 - দরকারে ধাপে ধাপে দেখাও। শেষে চাইলে একটি ছোট অনুশীলন প্রশ্ন দিতে পারো।
 - পড়াশোনার বাইরের বিষয় হলে বিনয়ের সঙ্গে পড়ার দিকে ফিরিয়ে আনো।
@@ -109,6 +130,41 @@ function parseJSON(txt) {
   const a = txt.indexOf('['), b = txt.lastIndexOf(']');
   if (a < 0 || b <= a) throw new Error('AI সঠিক ফরম্যাটে উত্তর দেয়নি, আবার চেষ্টা করুন');
   return JSON.parse(txt.slice(a, b + 1));
+}
+
+const EXPLAIN_SYS = `তুমি "AI মশাই" — স্নেহশীল AI শিক্ষক। শুধু বৈধ JSON অ্যারে দাও, কোনো ভূমিকা/মার্কডাউন নয়: [{"i":প্রশ্নের_নম্বর,"e":"ব্যাখ্যা"}]
+প্রতিটি ভুল প্রশ্নের জন্য ২–৩ বাক্যে (৬০ শব্দের মধ্যে) সহজ বাংলায় লেখো: কেন সঠিক উত্তরটি সঠিক, আর শিক্ষার্থীর বাছাই করা উত্তরটি কোথায় ভুল। শেষে চাইলে মনে রাখার একটি ছোট টিপস দাও।
+- দেওয়া "সঠিক উত্তর"কে সঠিক ধরেই ব্যাখ্যা করো। তবে সেটি নিশ্চিতভাবে ভুল মনে হলে ব্যাখ্যার শুরুতে "⚠️ উত্তরমালাটি আরেকবার যাচাই করুন।" লিখে কারণ বলো।
+- সহানুভূতিশীল ও উৎসাহব্যঞ্জক সুরে লেখো। তথ্য বানিয়ে বলো না।`;
+
+const dhakaDay = () => new Date(Date.now() + 6 * 3600e3).toISOString().slice(0, 10);
+const cleanQs = (arr) => (Array.isArray(arr) ? arr : [])
+  .filter((x) => x && typeof x.q === 'string' && Array.isArray(x.o) && x.o.length === 4 && x.o.every((o) => typeof o === 'string' && o.trim()) && Number.isInteger(x.a) && x.a >= 0 && x.a <= 3)
+  .map((x) => ({ q: x.q.replace(/\s+/g, ' ').trim(), o: x.o.map((o) => o.replace(/\s+/g, ' ').trim()), a: x.a, m: 1 }));
+
+// আজকের AI কুইজ (শ্রেণি অনুযায়ী দিনে একটি সেট; প্রথমজন চাইলে তৈরি হয়ে জমা থাকে)
+async function getQuiz(cls, day, create) {
+  const got = await sb(`/rest/v1/ai_daily_quiz?class_level=eq.${cls}&day=eq.${day}&select=q`);
+  if (got && got[0] && Array.isArray(got[0].q) && got[0].q.length) return got[0].q;
+  if (!create) return null;
+  let n = 5;
+  try {
+    const c = await sb('/rest/v1/ai_config?key=eq.aiq_count&select=val');
+    if (c && c[0]) n = Math.max(1, Math.min(10, parseInt(c[0].val) || 5));
+  } catch (e) {}
+  const subj = cls >= 13 ? 'সাধারণ জ্ঞান, গণিত, ইংরেজি, বাংলা (এডমিশন পরীক্ষার মান)' : 'শ্রেণির মূল বিষয়গুলো (গণিত, বিজ্ঞান, ইংরেজি, বাংলা, বাংলাদেশ ও বিশ্বপরিচয় ইত্যাদি) থেকে মিশিয়ে';
+  const prompt = `শ্রেণি: ${CLS[cls] || cls}\nবিষয়: ${subj}\nকাঠিন্য: মাঝারি\nপ্রশ্নসংখ্যা: ${n}\nতারিখ: ${day} (প্রতিদিন নতুন প্রশ্ন দাও)\nবিভিন্ন বিষয় থেকে একটি করে প্রশ্ন দাও, একই বিষয়ের পুনরাবৃত্তি কম রাখো।\navoid: []`;
+  let qs = [];
+  for (let k = 0; k < 2 && qs.length < n; k++) {
+    try {
+      const out = await claude({ model: SMART, system: GENQ_SYS, messages: [{ role: 'user', content: prompt }], max_tokens: 4000, json: true });
+      cleanQs(parseJSON(out)).forEach((x) => { if (qs.length < n && !qs.some((y) => y.q === x.q)) qs.push(x); });
+    } catch (e) { if (k === 1 && !qs.length) throw e; }
+  }
+  if (qs.length < Math.min(3, n)) throw new Error('আজকের কুইজ তৈরি হয়নি, একটু পরে আবার চেষ্টা করুন');
+  await sb('/rest/v1/ai_daily_quiz', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' }, body: JSON.stringify({ class_level: cls, day, q: qs }) }).catch(() => {});
+  const again = await sb(`/rest/v1/ai_daily_quiz?class_level=eq.${cls}&day=eq.${day}&select=q`);
+  return (again && again[0] && again[0].q) || qs;
 }
 
 module.exports = async (req, res) => {
@@ -162,7 +218,7 @@ avoid: ${JSON.stringify(avoid)}`;
       while (msgs.length && msgs[0].role !== 'user') msgs.shift();
       if (!msgs.length || msgs[msgs.length - 1].role !== 'user') return res.status(400).json({ error: 'প্রশ্ন লিখুন' });
       const how = await rpc('ai_charge', { p_user: u.id, p_kind: 'tutor' });
-      if (how === 'none') return res.status(402).json({ error: 'আজকের ফ্রি টিউটর মেসেজ শেষ। কয়েন শপ থেকে "টিউটর বুস্ট" কিনুন অথবা কাল আবার আসুন।' });
+      if (how === 'none') return res.status(402).json({ error: 'আজকের ফ্রি মেসেজ শেষ। কয়েন শপ থেকে "মশাই বুস্ট" কিনুন অথবা কাল আবার আসুন।' });
       try {
         const sys = TUTOR_SYS + (b.class_level ? `\nশিক্ষার্থীর শ্রেণি: ${CLS[b.class_level] || b.class_level}` : '');
         const reply = await claude({ model: FAST, system: sys, messages: msgs, max_tokens: 1000 });
@@ -194,6 +250,50 @@ avoid: ${JSON.stringify(avoid)}`;
         await rpc('ai_refund', { p_user: u.id, p_kind: 'doubt', p_how: how }).catch(() => {});
         throw e;
       }
+    }
+
+    if (act === 'explain') {
+      const raw = Array.isArray(b.items) ? b.items.slice(0, 15) : [];
+      const items = raw.map((x, i) => ({
+        i,
+        body: String((x && x.body) || '').slice(0, 500),
+        options: (Array.isArray(x && x.options) ? x.options : []).slice(0, 6).map((o) => String(o).slice(0, 200)),
+        correct: Number.isInteger(x && x.correct) ? x.correct : -1,
+        chosen: Number.isInteger(x && x.chosen) ? x.chosen : -1,
+      })).filter((x) => x.body && x.options.length >= 2 && x.correct >= 0 && x.correct < x.options.length);
+      if (!items.length) return res.status(400).json({ error: 'ব্যাখ্যা করার মতো প্রশ্ন পাওয়া যায়নি' });
+      const how = await rpc('ai_charge', { p_user: u.id, p_kind: 'explain' });
+      if (how === 'none') return res.status(402).json({ error: 'আজকের ফ্রি ব্যাখ্যা শেষ এবং যথেষ্ট কয়েন নেই। পরীক্ষা দিয়ে কয়েন জমান, অথবা কাল আবার আসুন।' });
+      try {
+        const prompt = items.map((x) => `প্রশ্ন ${x.i}: ${x.body}\n` + x.options.map((o, k) => `(${k + 1}) ${o}`).join('\n') + `\nসঠিক উত্তর: (${x.correct + 1}) ${x.options[x.correct]}\nশিক্ষার্থীর উত্তর: ` + (x.chosen >= 0 && x.chosen < x.options.length ? `(${x.chosen + 1}) ${x.options[x.chosen]}` : 'দেওয়া হয়নি')).join('\n\n');
+        const out = await claude({ model: SMART, system: EXPLAIN_SYS, messages: [{ role: 'user', content: prompt }], max_tokens: 4000, json: true });
+        const arr = parseJSON(out).filter((x) => x && Number.isInteger(x.i) && typeof x.e === 'string' && x.e.trim()).map((x) => ({ i: x.i, e: x.e.trim() }));
+        if (!arr.length) throw new Error('ব্যাখ্যা তৈরি হয়নি, আবার চেষ্টা করুন');
+        return res.json({ explanations: arr, how });
+      } catch (e) {
+        await rpc('ai_refund', { p_user: u.id, p_kind: 'explain', p_how: how }).catch(() => {});
+        throw e;
+      }
+    }
+
+    if (act === 'aiq_get' || act === 'aiq_submit') {
+      const cls = parseInt(b.class_level);
+      if (!(cls >= 6 && cls <= 13)) return res.status(400).json({ error: 'শ্রেণি বেছে নিন' });
+      const day = dhakaDay();
+      if (act === 'aiq_get') {
+        const done = await sb(`/rest/v1/ai_daily_done?user_id=eq.${u.id}&day=eq.${day}&select=score,total`);
+        if (done && done[0]) return res.json({ done: true, score: done[0].score, total: done[0].total });
+        const quiz = await getQuiz(cls, day, true);
+        return res.json({ done: false, day, questions: quiz.map((x) => ({ q: x.q, o: x.o })) });
+      }
+      const quiz = await getQuiz(cls, day, false);
+      if (!quiz) return res.status(400).json({ error: 'আগে আজকের কুইজটি খুলুন' });
+      const ans = Array.isArray(b.answers) ? b.answers : [];
+      let score = 0;
+      quiz.forEach((x, i) => { if (Number.isInteger(ans[i]) && ans[i] === x.a) score++; });
+      const coins = await rpc('ai_quiz_award', { p_user: u.id, p_day: day, p_cls: cls, p_score: score, p_total: quiz.length });
+      if (coins === -1) return res.status(409).json({ error: 'আজকের কুইজ আগেই জমা দেওয়া হয়েছে। কাল নতুন কুইজ আসবে!' });
+      return res.json({ score, total: quiz.length, coins, keys: quiz.map((x) => x.a), questions: quiz.map((x) => ({ q: x.q, o: x.o })) });
     }
 
     return res.status(400).json({ error: 'অজানা action' });
