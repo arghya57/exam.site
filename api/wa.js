@@ -1,15 +1,16 @@
 // api/wa.js — WhatsApp Cloud API: ফলাফল PDF, সকালের প্রশ্ন + স্ট্রিক, সাপ্তাহিক অভিভাবক রিপোর্ট
-// Env: SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY, WA_TOKEN, WA_PHONE_ID, CRON_SECRET, SITE_URL
-// ঐচ্ছিক: WA_TPL_RESULT, WA_TPL_DAILY, WA_TPL_WEEKLY, WA_LANG, WA_GRAPH_VERSION, AI_MODEL_SMART
+// Env: SUPABASE_URL, SUPABASE_SERVICE_KEY, GEMINI_API_KEY, WA_TOKEN, WA_PHONE_ID, CRON_SECRET, SITE_URL
+// ঐচ্ছিক: WA_TPL_RESULT, WA_TPL_DAILY, WA_TPL_WEEKLY, WA_LANG, WA_GRAPH_VERSION, AI_MODEL_SMART, AI_MODEL_FALLBACK
 const SB = process.env.SUPABASE_URL;
 const SK = process.env.SUPABASE_SERVICE_KEY;
-const AK = process.env.ANTHROPIC_API_KEY;
+const GK = process.env.GEMINI_API_KEY;
 const WT = process.env.WA_TOKEN;
 const PID = process.env.WA_PHONE_ID;
 const GV = process.env.WA_GRAPH_VERSION || 'v23.0';
 const LANG = process.env.WA_LANG || 'bn';
 const SITE = process.env.SITE_URL || '';
-const SMART = process.env.AI_MODEL_SMART || 'claude-sonnet-5-5';
+const SMART = process.env.AI_MODEL_SMART || 'gemini-3.8-flash';
+const FALLBACKS = (process.env.AI_MODEL_FALLBACK || 'gemini-3.5-flash-lite,gemini-3.5-flash,gemini-3.8-flash').split(',').map((x) => x.trim()).filter(Boolean);
 const TPL = {
   result: process.env.WA_TPL_RESULT || 'exam_result_pdf',
   daily: process.env.WA_TPL_DAILY || 'daily_question',
@@ -93,15 +94,42 @@ async function uploadPdf(b64) {
   return j.id;
 }
 
+// Gemini দিয়ে লেখা তৈরি (ফ্রি টিয়ারে চলে); মূল মডেল ব্যস্ত থাকলে পরেরটায় যায়
+const noThink = new Set();
 async function claudeText(system, user, max_tokens = 800) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': AK, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: SMART, max_tokens, system, messages: [{ role: 'user', content: user }] }),
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error((j.error && j.error.message) || 'AI ত্রুটি');
-  return (j.content || []).map((b) => b.text || '').join('');
+  if (!GK) throw new Error('GEMINI_API_KEY সেট করা নেই');
+  const body = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: { maxOutputTokens: max_tokens, temperature: 0.6, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+  };
+  const models = [SMART, ...FALLBACKS].filter((m, i, a) => a.indexOf(m) === i);
+  let lastErr = 'AI ত্রুটি';
+  for (const m of models) {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent';
+    const go = (bd) => fetch(url, { method: 'POST', headers: { 'x-goog-api-key': GK, 'content-type': 'application/json' }, body: JSON.stringify(bd) });
+    let bd = body;
+    if (noThink.has(m)) { bd = JSON.parse(JSON.stringify(body)); delete bd.generationConfig.thinkingConfig; }
+    let r = await go(bd);
+    if (r.status === 400 && bd.generationConfig.thinkingConfig) {
+      noThink.add(m);
+      const b2 = JSON.parse(JSON.stringify(body));
+      delete b2.generationConfig.thinkingConfig;
+      b2.generationConfig.maxOutputTokens = Math.max(max_tokens * 2, 2000);
+      r = await go(b2);
+    }
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      const c = j.candidates && j.candidates[0];
+      const t = ((c && c.content && c.content.parts) || []).map((p) => p.text || '').join('');
+      if (t) return t;
+      lastErr = 'AI উত্তর দেয়নি';
+      continue;
+    }
+    lastErr = (j.error && j.error.message) || 'AI ত্রুটি ' + r.status;
+    if (![404, 429, 500, 502, 503, 504].includes(r.status) && !/no longer available|high demand|overloaded|unavailable|not found/i.test(lastErr)) break;
+  }
+  throw new Error(lastErr);
 }
 
 // ---- সকালের প্রশ্ন (শ্রেণি + তারিখ অনুযায়ী একবার তৈরি হয়ে জমা থাকে) ----
