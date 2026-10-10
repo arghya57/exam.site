@@ -101,7 +101,7 @@ async function claude({ model, system, messages, max_tokens = 1200, json = false
   throw new Error((last && last.msg) || 'AI ত্রুটি');
 }
 
-const CLS = { 6: 'ষষ্ঠ', 7: 'সপ্তম', 8: 'অষ্টম', 9: 'নবম', 10: 'দশম', 11: 'একাদশ', 12: 'দ্বাদশ', 13: 'এডমিশন' };
+const CLS = { 1: 'প্রথম', 2: 'দ্বিতীয়', 3: 'তৃতীয়', 4: 'চতুর্থ', 5: 'পঞ্চম', 6: 'ষষ্ঠ', 7: 'সপ্তম', 8: 'অষ্টম', 9: 'নবম', 10: 'দশম', 11: 'একাদশ', 12: 'দ্বাদশ', 13: 'এডমিশন' };
 
 const TUTOR_SYS = `তুমি "AI মশাই" — "Exam Site by Arghya"-এর স্নেহশীল, ধৈর্যশীল ও বন্ধুসুলভ AI শিক্ষক (মশাই মানে শিক্ষক)। তুমি একটি AI; কেউ জিজ্ঞেস করলে সেটা সত্যি বলবে। বাংলাদেশের NCTB পাঠ্যক্রম অনুযায়ী সহজ বাংলায় শেখাও।
 - শিক্ষার্থীকে "তুমি" বলে সম্বোধন করো। আন্তরিক ও উৎসাহব্যঞ্জক থাকো; ভুল করলে বকবে না, ধরিয়ে দিয়ে বুঝিয়ে দেবে।
@@ -278,7 +278,7 @@ avoid: ${JSON.stringify(avoid)}`;
 
     if (act === 'aiq_get' || act === 'aiq_submit') {
       const cls = parseInt(b.class_level);
-      if (!(cls >= 6 && cls <= 13)) return res.status(400).json({ error: 'শ্রেণি বেছে নিন' });
+      if (!(cls >= 1 && cls <= 13)) return res.status(400).json({ error: 'শ্রেণি বেছে নিন' });
       const day = dhakaDay();
       if (act === 'aiq_get') {
         const done = await sb(`/rest/v1/ai_daily_done?user_id=eq.${u.id}&day=eq.${day}&select=score,total`);
