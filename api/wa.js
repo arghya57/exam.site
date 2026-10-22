@@ -237,6 +237,14 @@ async function jobWeekly(dry) {
 const GTHEMES = [
   'বাংলাদেশের ইতিহাস ও মুক্তিযুদ্ধ', 'বিজ্ঞান ও প্রকৃতি', 'গণিত ও যুক্তি', 'ভূগোল ও বিশ্বের দেশ-রাজধানী',
   'প্রাণী, পাখি ও গাছপালা', 'বাংলা ভাষা-সাহিত্য ও সংস্কৃতি', 'খেলাধুলা, প্রযুক্তি ও দৈনন্দিন জীবন',
+  'মানবদেহ ও স্বাস্থ্য', 'রসায়ন ও পদার্থের ধর্ম', 'বাংলাদেশের নদী, পাহাড় ও জলবায়ু', 'বিশ্ব ইতিহাস ও আবিষ্কার',
+  'ইংরেজি শব্দ ও ব্যাকরণ', 'পরিবেশ ও জলবায়ু পরিবর্তন', 'মহাকাশ ও পৃথিবী', 'বাংলাদেশের অর্থনীতি ও সংবিধান',
+  'কম্পিউটার ও প্রযুক্তির মূলনীতি', 'ধর্ম-সংস্কৃতি ও উৎসব', 'কৃষি ও খাদ্য', 'বিখ্যাত মানুষ ও তাদের কাজ',
+];
+// সংখ্যার ধাঁধার নিয়মের ধরন — প্রতিবার একটি বাছা হয়, যাতে প্রশ্নের ছাঁচ একঘেয়ে না হয়
+const SEQ_RULES = [
+  'ধ্রুব যোগ বা বিয়োগের ধারা', 'ধ্রুব গুণের ধারা', 'বর্গ বা ঘনের ধারা', 'আগের দুটির যোগফলের ধারা (ফিবোনাচ্চি-ধরন)',
+  'বিকল্পে যোগ ও গুণের মিশ্র ধারা', 'ক্রমবর্ধমান পার্থক্যের ধারা (১, ২, ৩ ...)', 'দুটি আলাদা ধারার মিশ্রণ (জোড় ও বিজোড় স্থান আলাদা নিয়মে)',
 ];
 const gnorm = (x) => String(x == null ? '' : x).replace(/\s+/g, ' ').trim().toLowerCase();
 function gshuf(a) { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; }
@@ -259,10 +267,11 @@ function seqOk(t) {
   if (t.slice(2).every((x, i) => x === t[i] + t[i + 1])) return true;
   return false;
 }
-async function genSeq(day) {
+async function genSeq(day, avoid) {
+  const rule = gshuf(SEQ_RULES)[0];
   const txt = await claudeText(
     'তুমি স্কুলের শিক্ষার্থীদের জন্য সংখ্যার ধাঁধার প্রশ্নপ্রণেতা। শুধু JSON দাও: {"items":[{"t":[৬টি পূর্ণসংখ্যা]}]}। প্রতিটি t-তে ঠিক ৬টি সংখ্যা, একটি স্পষ্ট নিয়মে চলে (যোগ/বিয়োগ, গুণ, বর্গ, ঘন, ফিবোনাচ্চি-ধরন)। কোনো ব্যাখ্যা নয়।',
-    `তারিখ ${day}। ৮টি ভিন্ন ধরনের ধাঁধা দাও, সহজ থেকে একটু কঠিন। সংখ্যা ছোট রাখো (সর্বোচ্চ ৫ অঙ্ক)।`, 900);
+    `তারিখ ${day}। ৮টি ধাঁধা দাও; এদের বেশিরভাগ নিয়ম হোক: ${rule}। সহজ থেকে একটু কঠিন, সংখ্যা ছোট (সর্বোচ্চ ৫ অঙ্ক)। এগুলোর মতো (একই ধারা) দিও না: ${avoid}`, 900);
   return gjson(txt).filter((x) => seqOk(x.t)).map((x) => {
     const t = x.t, ans = t[5], last = t[5] - t[4];
     const cand = gshuf([ans + 1, ans - 1, ans + 2, ans - 2, ans + (last || 3), ans - (last || 3), ans + 10, ans * 2].filter((v, i, a) => v !== ans && a.indexOf(v) === i)).slice(0, 3);
@@ -286,10 +295,10 @@ async function genPic(day, theme, avoid) {
     && new Set(x.o.map(gnorm)).size === 4 && x.o.every((o) => typeof o === 'string' && o.length > 0 && o.length <= 24) && x.a >= 0 && x.a <= 3)
     .map((x) => { const right = x.o[x.a], o = gshuf(x.o); return { game: 'pic', q: x.q.trim(), opts: o, ans: o.indexOf(right) }; });
 }
-async function genPairs(day, theme) {
+async function genPairs(day, theme, avoid) {
   const txt = await claudeText(
     'তুমি কার্ড মেলানো খেলার জোড়া বানাও। শুধু JSON দাও: {"items":[{"a":"কার্ড ১","b":"কার্ড ২"}]}। প্রতিটি জোড়া নিশ্চিতভাবে সঠিক। উদাহরণের ধরন: ইংরেজি শব্দ ↔ বাংলা অর্থ, দেশ ↔ রাজধানী, প্রাণী ↔ ডাক/বাসস্থান, বিখ্যাত ব্যক্তি ↔ পরিচয়। প্রতিটি কার্ডের লেখা ১৬ অক্ষরের মধ্যে।',
-    `তারিখ ${day}। বিষয়-ভাবনা: ${theme}। ৮টি নতুন জোড়া দাও, একই ধরনের না হয়ে মিশ্র হোক।`, 900);
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme}। ৮টি নতুন জোড়া দাও, একই ধরনের না হয়ে মিশ্র হোক। এই কার্ডগুলো আগে দেওয়া হয়েছে, এগুলো আবার দিও না: ${avoid}`, 900);
   return gjson(txt).filter((x) => typeof x.a === 'string' && typeof x.b === 'string' && x.a.trim() && x.b.trim() && x.a.length <= 20 && x.b.length <= 20 && gnorm(x.a) !== gnorm(x.b))
     .map((x) => ({ a: flat(x.a, 20), b: flat(x.b, 20) }));
 }
@@ -344,15 +353,17 @@ async function jobXgExt(dry) {
 }
 async function jobGames(dry) {
   const day = today();
-  const theme = GTHEMES[new Date(day + 'T00:00:00Z').getUTCDay()];
-  const oldP = (await sb('/rest/v1/game_puzzles?select=game,q&order=id.desc&limit=600')) || [];
-  const oldM = (await sb('/rest/v1/game_pairs?select=a,b&order=id.desc&limit=600')) || [];
+  const theme = gshuf(GTHEMES)[0];
+  const oldP = (await sb('/rest/v1/game_puzzles?select=game,q&order=id.desc&limit=2000')) || [];
+  const oldM = (await sb('/rest/v1/game_pairs?select=a,b&order=id.desc&limit=2000')) || [];
   const haveQ = new Set(oldP.map((x) => x.game + '|' + gnorm(x.q)));
   const haveA = new Set(oldM.flatMap((x) => [gnorm(x.a), gnorm(x.b)]));
-  const avoid = (g) => oldP.filter((x) => x.game === g).slice(0, 30).map((x) => x.q).join(' | ') || 'কিছু নেই';
+  // এআই-কে শেষ ১৫০টি প্রশ্ন/জোড়া দেখানো হয়, যাতে নতুন কিছু দেয়
+  const avoid = (g) => oldP.filter((x) => x.game === g).slice(0, 150).map((x) => x.q).join(' | ') || 'কিছু নেই';
+  const avoidPairs = oldM.slice(0, 150).map((x) => x.a).join(' | ') || 'কিছু নেই';
   const [seq, tf, pic, pr] = await Promise.all([
-    genSeq(day).catch(() => []), genTF(day, theme, avoid('tf')).catch(() => []),
-    genPic(day, theme, avoid('pic')).catch(() => []), genPairs(day, theme).catch(() => []),
+    genSeq(day, avoid('numseq')).catch(() => []), genTF(day, theme, avoid('tf')).catch(() => []),
+    genPic(day, theme, avoid('pic')).catch(() => []), genPairs(day, theme, avoidPairs).catch(() => []),
   ]);
   const seen = new Set();
   const puz = [...seq, ...tf, ...pic].filter((x) => { const k = x.game + '|' + gnorm(x.q); if (haveQ.has(k) || seen.has(k)) return false; seen.add(k); return true; });
