@@ -293,6 +293,55 @@ async function genPairs(day, theme) {
   return gjson(txt).filter((x) => typeof x.a === 'string' && typeof x.b === 'string' && x.a.trim() && x.b.trim() && x.a.length <= 20 && x.b.length <= 20 && gnorm(x.a) !== gnorm(x.b))
     .map((x) => ({ a: flat(x.a, 20), b: flat(x.b, 20) }));
 }
+// ===== নতুন গেম: জোড়া মেলাও (match) ও স্লাইডার (slider) — প্রতিদিন AI কন্টেন্ট =====
+const XG_THEMES = ['ধাতু ও রসায়ন', 'বাংলাদেশের ইতিহাস', 'গণিত ও জ্যামিতি', 'বিজ্ঞান ও প্রকৃতি', 'ভূগোল ও পরিবেশ', 'সাধারণ জ্ঞান'];
+function xgValidMatch(x) {
+  if (!x || typeof x.title !== 'string' || !Array.isArray(x.pairs)) return null;
+  const pr = x.pairs
+    .filter((p) => p && typeof p.a === 'string' && typeof p.b === 'string' && p.a.trim() && p.b.trim() && p.a.length <= 40 && p.b.length <= 40)
+    .map((p) => ({ a: flat(p.a, 40), b: flat(p.b, 40) }));
+  const sa = new Set(pr.map((p) => gnorm(p.a))), sb2 = new Set(pr.map((p) => gnorm(p.b)));
+  if (pr.length < 3 || pr.length > 5 || sa.size !== pr.length || sb2.size !== pr.length) return null;
+  return { title: flat(x.title, 60), pairs: pr };
+}
+function xgValidSlider(x) {
+  if (!x || typeof x.q !== 'string' || !x.q.trim() || x.q.length > 220) return null;
+  const mn = Number(x.min), mx = Number(x.max), st = Number(x.step || 1), tg = Number(x.target), tl = Number(x.tol || 0);
+  if (![mn, mx, st, tg, tl].every((v) => Number.isInteger(v))) return null;
+  if (!(mn < mx) || mx - mn > 100000 || st <= 0 || st > mx - mn) return null;
+  if (tg < mn || tg > mx || (tg - mn) % st !== 0) return null;
+  if (tl < 0 || tl > Math.max(1, (mx - mn) / 10)) return null;
+  return { q: flat(x.q, 220), min: mn, max: mx, step: st, target: tg, tol: tl, unit: typeof x.unit === 'string' ? flat(x.unit, 20) : '' };
+}
+async function genXgMatch(day, theme) {
+  const txt = await claudeText(
+    'তুমি স্কুলের শিক্ষার্থীদের জন্য জোড়া মেলানোর খেলার প্রশ্নপ্রণেতা। শুধু JSON দাও, কোনো ব্যাখ্যা নয়: {"items":[{"title":"শিরোনাম","pairs":[{"a":"বাম","b":"ডান"}]}]}। প্রতি সেটে ৩–৪টি জোড়া; প্রতিটি জোড়া নিশ্চিতভাবে সঠিক; ডান পাশের প্রতিটি লেখা আলাদা; প্রতিটি লেখা ৪০ অক্ষরের মধ্যে।',
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme}। ৩টি নতুন সেট দাও; সাধারণ উদাহরণের মতো না হয়ে নতুন ধরনের হোক।`, 1400);
+  return gjson(txt).map(xgValidMatch).filter(Boolean);
+}
+async function genXgSlider(day, theme) {
+  const txt = await claudeText(
+    'তুমি স্কুলের শিক্ষার্থীদের জন্য স্লাইডার প্রশ্নপ্রণেতা। শুধু JSON দাও: {"items":[{"q":"প্রশ্ন","min":0,"max":100,"step":1,"target":60,"tol":2,"unit":"একক"}]}। min, max, step, target, tol সব পূর্ণসংখ্যা; target অবশ্যই min থেকে শুরু করে step-এর গুণিতক ধাপে থাকবে; সঠিক উত্তর নিশ্চিতভাবে সঠিক হতে হবে।',
+    `তারিখ ${day}। বিষয়-ভাবনা: ${theme}। ৩টি নতুন প্রশ্ন দাও (গণনা, বিজ্ঞানের মান, ভূগোলের সংখ্যা ইত্যাদি)।`, 1200);
+  return gjson(txt).map(xgValidSlider).filter(Boolean);
+}
+async function jobXgExt(dry) {
+  const day = today();
+  const theme = XG_THEMES[new Date(day + 'T00:00:00Z').getUTCDay() % XG_THEMES.length];
+  const [mt, sl] = await Promise.all([genXgMatch(day, theme).catch(() => []), genXgSlider(day, theme).catch(() => [])]);
+  const out = { ok: true, day, theme, match: mt.length, slider: sl.length };
+  if (dry) return { ...out, dry: true };
+  if (!mt.length && !sl.length) throw new Error('এআই থেকে কোনো বৈধ নতুন গেম পাওয়া যায়নি');
+  // ১৪ দিনের পুরনো কন্টেন্ট বন্ধ — নতুনগুলো চালু থাকবে, তাই গেম প্রতিদিন নতুন দেখায়
+  const cut = new Date(Date.now() - 14 * 86400000).toISOString();
+  await sb('/rest/v1/xg_ext?created_at=lt.' + encodeURIComponent(cut), { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ active: false }) }).catch(() => {});
+  const rows = [
+    ...mt.map((p) => ({ game: 'match', payload: p, source: 'ai' })),
+    ...sl.map((p) => ({ game: 'slider', payload: p, source: 'ai' })),
+  ];
+  await sb('/rest/v1/xg_ext', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(rows) });
+  return out;
+}
 async function jobGames(dry) {
   const day = today();
   const theme = GTHEMES[new Date(day + 'T00:00:00Z').getUTCDay()];
@@ -329,6 +378,7 @@ module.exports = async (req, res) => {
       if (!cs || (req.headers.authorization || '') !== 'Bearer ' + cs) return res.status(401).json({ error: 'unauthorized' });
       const job = (req.query && req.query.job) || '';
       if (job === 'games') return res.json(await jobGames(false));
+      if (job === 'xgext') return res.json(await jobXgExt(false));
       if (!WT || !PID) return res.status(500).json({ error: 'WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
       if (job === 'daily') return res.json(await jobDaily(false));
       if (job === 'weekly') return res.json(await jobWeekly(false));
@@ -339,7 +389,7 @@ module.exports = async (req, res) => {
     const u = await authUser(req);
     if (!u) return res.status(401).json({ error: 'লগইন করুন' });
     const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
-    if ((!WT || !PID) && !(b.action === 'run' && b.job === 'games')) return res.status(500).json({ error: 'সার্ভারে WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
+    if ((!WT || !PID) && !(b.action === 'run' && (b.job === 'games' || b.job === 'xgext'))) return res.status(500).json({ error: 'সার্ভারে WA_TOKEN / WA_PHONE_ID সেট করা নেই' });
 
     // স্টুডেন্ট: জমা দেওয়া মাত্র নিজের WhatsApp-এ উত্তরপত্র PDF
     if (b.action === 'result') {
@@ -371,6 +421,7 @@ module.exports = async (req, res) => {
       if (b.job === 'daily') return res.json(await jobDaily(!!b.dry));
       if (b.job === 'weekly') return res.json(await jobWeekly(!!b.dry));
       if (b.job === 'games') return res.json(await jobGames(!!b.dry));
+      if (b.job === 'xgext') return res.json(await jobXgExt(!!b.dry));
       return res.status(400).json({ error: 'job ভুল' });
     }
     if (b.action === 'test') {
